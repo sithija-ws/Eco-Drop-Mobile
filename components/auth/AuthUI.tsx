@@ -1,18 +1,20 @@
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
   Pressable,
+  StyleProp,
   StyleSheet,
   Text,
   TextInput,
   TextInputProps,
   View,
+  ViewStyle,
 } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { colors, radius, softShadow, spacing } from "../../constants/theme";
 
 type IonIconName = React.ComponentProps<typeof Ionicons>["name"];
 type MaterialIconName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
-
 
 export function EcoLogo({ compact = false }: { compact?: boolean }) {
   return (
@@ -82,7 +84,7 @@ export function AuthInput({
   label: string;
   icon: IonIconName;
   rightText?: string;
-  containerStyle?: object;
+  containerStyle?: StyleProp<ViewStyle>;
 }) {
   const [hidden, setHidden] = useState(Boolean(secureTextEntry));
 
@@ -121,21 +123,35 @@ export function PrimaryButton({
   title,
   onPress,
   icon = "arrow-forward",
+  loading = false,
+  disabled = false,
 }: {
   title: string;
   onPress: () => void;
   icon?: IonIconName;
+  loading?: boolean;
+  disabled?: boolean;
 }) {
+  const isDisabled = loading || disabled;
+
   return (
     <Pressable
+      disabled={isDisabled}
       style={({ pressed }) => [
         styles.primaryButton,
         pressed && styles.buttonPressed,
+        isDisabled && styles.disabledButton,
       ]}
       onPress={onPress}
     >
-      <Text style={styles.primaryButtonText}>{title}</Text>
-      <Ionicons name={icon} size={18} color="#FFFFFF" />
+      {loading ? (
+        <ActivityIndicator color="#FFFFFF" />
+      ) : (
+        <>
+          <Text style={styles.primaryButtonText}>{title}</Text>
+          <Ionicons name={icon} size={18} color="#FFFFFF" />
+        </>
+      )}
     </Pressable>
   );
 }
@@ -144,16 +160,20 @@ export function SecondaryButton({
   title,
   onPress,
   icon = "arrow-back",
+  disabled = false,
 }: {
   title: string;
   onPress: () => void;
   icon?: IonIconName;
+  disabled?: boolean;
 }) {
   return (
     <Pressable
+      disabled={disabled}
       style={({ pressed }) => [
         styles.secondaryButton,
         pressed && styles.buttonPressed,
+        disabled && styles.disabledButton,
       ]}
       onPress={onPress}
     >
@@ -167,16 +187,22 @@ export function SelectField({
   label,
   value,
   disabled,
+  onPress,
 }: {
   label: string;
   value: string;
   disabled?: boolean;
+  onPress?: () => void;
 }) {
   return (
     <View style={styles.selectGroup}>
       <Text style={styles.inputLabel}>{label}</Text>
 
-      <Pressable style={[styles.selectBox, disabled && styles.selectDisabled]}>
+      <Pressable
+        disabled={disabled}
+        onPress={onPress}
+        style={[styles.selectBox, disabled && styles.selectDisabled]}
+      >
         <View style={styles.selectLeft}>
           <Ionicons name="location-outline" size={17} color={colors.muted} />
           <Text style={[styles.selectValue, disabled && styles.selectValueDisabled]}>
@@ -365,6 +391,9 @@ const styles = StyleSheet.create({
   buttonPressed: {
     opacity: 0.86,
     transform: [{ scale: 0.98 }],
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
   selectGroup: {
     marginBottom: spacing.md,

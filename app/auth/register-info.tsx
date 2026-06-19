@@ -1,7 +1,7 @@
-import React from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { useState } from "react";
+import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router, useLocalSearchParams } from "expo-router";
+import { router } from "expo-router";
 import {
   AuthInput,
   AuthProgress,
@@ -9,16 +9,62 @@ import {
   SecondaryButton,
   SecureBadge,
 } from "../../components/auth/AuthUI";
+import { useSignup } from "../../context/SignupContext";
 import { colors, radius, softShadow, spacing } from "../../constants/theme";
 
 export default function RegisterInfoScreen() {
-  const { role = "resident" } = useLocalSearchParams<{ role?: string }>();
+  const { draft, updateDraft } = useSignup();
+
+  const [fullName, setFullName] = useState(draft.fullName ?? "");
+  const [phone, setPhone] = useState(draft.phone ?? "");
+  const [email, setEmail] = useState(draft.email ?? "");
+  const [password, setPassword] = useState(draft.password ?? "");
+  const [confirmPassword, setConfirmPassword] = useState(
+    draft.confirmPassword ?? ""
+  );
 
   const handleNext = () => {
-    router.push({
-      pathname: "/auth/register-area",
-      params: { role },
+    if (
+      !fullName.trim() ||
+      !phone.trim() ||
+      !email.trim() ||
+      !password ||
+      !confirmPassword
+    ) {
+      Alert.alert(
+        "Missing details",
+        "Please fill all personal information fields."
+      );
+      return;
+    }
+
+    if (!email.includes("@")) {
+      Alert.alert("Invalid email", "Please enter a valid email address.");
+      return;
+    }
+
+    if (password.length < 6) {
+      Alert.alert("Weak password", "Password should be at least 6 characters.");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      Alert.alert(
+        "Password mismatch",
+        "Password and confirm password do not match."
+      );
+      return;
+    }
+
+    updateDraft({
+      fullName: fullName.trim(),
+      phone: phone.trim(),
+      email: email.trim().toLowerCase(),
+      password,
+      confirmPassword,
     });
+
+    router.push("/auth/register-area");
   };
 
   return (
@@ -41,13 +87,17 @@ export default function RegisterInfoScreen() {
             icon="person-outline"
             placeholder="Jane Doe"
             autoCapitalize="words"
+            value={fullName}
+            onChangeText={setFullName}
           />
 
           <AuthInput
             label="Phone Number"
             icon="call-outline"
-            placeholder="+1 (555) 000-0000"
+            placeholder="+94 77 000 0000"
             keyboardType="phone-pad"
+            value={phone}
+            onChangeText={setPhone}
           />
 
           <AuthInput
@@ -56,6 +106,8 @@ export default function RegisterInfoScreen() {
             placeholder="jane@example.com"
             keyboardType="email-address"
             autoCapitalize="none"
+            value={email}
+            onChangeText={setEmail}
           />
 
           <AuthInput
@@ -63,6 +115,8 @@ export default function RegisterInfoScreen() {
             icon="lock-closed-outline"
             placeholder="••••••••"
             secureTextEntry
+            value={password}
+            onChangeText={setPassword}
           />
 
           <AuthInput
@@ -70,6 +124,8 @@ export default function RegisterInfoScreen() {
             icon="shield-checkmark-outline"
             placeholder="••••••••"
             secureTextEntry
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
           />
 
           <SecureBadge />

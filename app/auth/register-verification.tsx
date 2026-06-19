@@ -1,7 +1,7 @@
-import React from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { useState } from "react";
+import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router, useLocalSearchParams } from "expo-router";
+import { router } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import {
   AuthProgress,
@@ -9,15 +9,33 @@ import {
   SecondaryButton,
   SecureBadge,
 } from "../../components/auth/AuthUI";
+import { useSignup } from "../../context/SignupContext";
+import { registerEcoUser } from "../../services/authService";
+import { getFirebaseErrorMessage } from "../../utils/firebaseErrors";
+import { getHomeRouteForRole } from "../../utils/roleRoutes";
 import { colors, radius, softShadow, spacing } from "../../constants/theme";
 
 export default function RegisterVerificationScreen() {
-  const { role = "resident" } = useLocalSearchParams<{ role?: string }>();
+  const { draft, clearDraft } = useSignup();
+  const [loading, setLoading] = useState(false);
 
-  const handleCreateAccount = () => {
-    // Frontend-only for now.
-    // Later, after backend is ready, call register API here.
-    router.replace("/auth/login");
+  const handleCreateAccount = async () => {
+    try {
+      setLoading(true);
+
+      const { profile } = await registerEcoUser(draft);
+
+      clearDraft();
+
+      router.replace(getHomeRouteForRole(profile.role));
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : getFirebaseErrorMessage(error);
+
+      Alert.alert("Registration failed", message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -40,21 +58,44 @@ export default function RegisterVerificationScreen() {
           <Text style={styles.title}>Verify Your Account</Text>
 
           <Text style={styles.subtitle}>
-            Review your details and create your Eco Drop {String(role)} account.
-            Verification documents can be added later from your profile.
+            Review your details and create your Eco Drop account. Your account
+            will be securely stored in Firebase.
           </Text>
 
           <View style={styles.summaryBox}>
-            <SummaryRow label="Account Type" value={String(role)} />
-            <SummaryRow label="Security" value="Protected" />
-            <SummaryRow label="Location" value="Ready to assign" />
+            <SummaryRow label="Account Type" value={draft.role ?? "Not selected"} />
+            <SummaryRow label="Name" value={draft.fullName ?? "Missing"} />
+            <SummaryRow label="Email" value={draft.email ?? "Missing"} />
+            <SummaryRow
+              label="GN Division"
+              value={draft.area?.gnDivision ?? "Missing"}
+            />
           </View>
+
+          {draft.role === "collector" ? (
+            <View style={styles.pendingNote}>
+              <MaterialCommunityIcons
+                name="information-outline"
+                size={18}
+                color="#8A5A00"
+              />
+
+              <Text style={styles.pendingText}>
+                Collector accounts may require admin approval before accepting
+                jobs.
+              </Text>
+            </View>
+          ) : null}
 
           <SecureBadge />
 
           <View style={styles.actionsRow}>
             <View style={styles.backWrap}>
-              <SecondaryButton title="Back" onPress={() => router.back()} />
+              <SecondaryButton
+                title="Back"
+                onPress={() => router.back()}
+                disabled={loading}
+              />
             </View>
 
             <View style={styles.nextWrap}>
@@ -62,6 +103,7 @@ export default function RegisterVerificationScreen() {
                 title="Create Account"
                 onPress={handleCreateAccount}
                 icon="checkmark"
+                loading={loading}
               />
             </View>
           </View>
@@ -75,7 +117,9 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.summaryRow}>
       <Text style={styles.summaryLabel}>{label}</Text>
-      <Text style={styles.summaryValue}>{value}</Text>
+      <Text style={styles.summaryValue} numberOfLines={1}>
+        {value}
+      </Text>
     </View>
   );
 }
@@ -131,6 +175,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: spacing.md,
   },
   summaryLabel: {
     color: colors.textSoft,
@@ -138,10 +183,27 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   summaryValue: {
+    flex: 1,
+    textAlign: "right",
     color: colors.primaryDeep,
     fontSize: 13,
     fontWeight: "900",
     textTransform: "capitalize",
+  },
+  pendingNote: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: "#FFF6E5",
+    marginBottom: spacing.md,
+  },
+  pendingText: {
+    flex: 1,
+    color: "#8A5A00",
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "800",
   },
   actionsRow: {
     flexDirection: "row",

@@ -1,7 +1,15 @@
-import React from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { useMemo, useState } from "react";
+import {
+  Alert,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router, useLocalSearchParams } from "expo-router";
+import { router } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import {
@@ -12,16 +20,116 @@ import {
   SecureBadge,
   SelectField,
 } from "../../components/auth/AuthUI";
+import { useSignup } from "../../context/SignupContext";
 import { colors, radius, softShadow, spacing } from "../../constants/theme";
 
+const AREA_DATA = {
+  Colombo: {
+    "Colombo Divisional Secretariat": [
+      "Colombo North - 04",
+      "Pettah",
+      "Fort",
+      "Slave Island",
+    ],
+    "Thimbirigasyaya DS Division": [
+      "Bambalapitiya",
+      "Narahenpita",
+      "Kirulapone",
+      "Thimbirigasyaya",
+    ],
+    "Dehiwala DS Division": [
+      "Dehiwala West",
+      "Mount Lavinia",
+      "Kohuwala",
+      "Nedimala",
+    ],
+  },
+  Gampaha: {
+    "Gampaha DS Division": ["Gampaha Town", "Yakkala", "Miriswatta"],
+    "Negombo DS Division": ["Negombo Central", "Kochchikade", "Dalupotha"],
+  },
+  Kalutara: {
+    "Kalutara DS Division": ["Kalutara North", "Kalutara South", "Nagoda"],
+    "Panadura DS Division": ["Panadura Town", "Wadduwa", "Keselwatta"],
+  },
+} as const;
+
+type District = keyof typeof AREA_DATA;
+type SelectType = "district" | "ds" | "gn";
+
 export default function RegisterAreaScreen() {
-  const { role = "resident" } = useLocalSearchParams<{ role?: string }>();
+  const { draft, updateDraft } = useSignup();
+
+  const [district, setDistrict] = useState<string>(
+    draft.area?.district ?? ""
+  );
+  const [dsDivision, setDsDivision] = useState<string>(
+    draft.area?.dsDivision ?? ""
+  );
+  const [gnDivision, setGnDivision] = useState<string>(
+    draft.area?.gnDivision ?? ""
+  );
+  const [selectType, setSelectType] = useState<SelectType | null>(null);
+
+  const dsOptions = useMemo(() => {
+    if (!district) return [];
+    return Object.keys(AREA_DATA[district as District] ?? {});
+  }, [district]);
+
+  const gnOptions = useMemo(() => {
+    if (!district || !dsDivision) return [];
+
+    const districtData = AREA_DATA[district as District] as
+      | Record<string, readonly string[]>
+      | undefined;
+
+    return [...(districtData?.[dsDivision] ?? [])];
+  }, [district, dsDivision]);
+
+  const modalOptions = useMemo(() => {
+    if (selectType === "district") return Object.keys(AREA_DATA);
+    if (selectType === "ds") return dsOptions;
+    if (selectType === "gn") return gnOptions;
+    return [];
+  }, [selectType, dsOptions, gnOptions]);
+
+  const handleSelect = (value: string) => {
+    if (selectType === "district") {
+      setDistrict(value);
+      setDsDivision("");
+      setGnDivision("");
+    }
+
+    if (selectType === "ds") {
+      setDsDivision(value);
+      setGnDivision("");
+    }
+
+    if (selectType === "gn") {
+      setGnDivision(value);
+    }
+
+    setSelectType(null);
+  };
 
   const handleNext = () => {
-    router.push({
-      pathname: "/auth/register-verification",
-      params: { role },
+    if (!district || !dsDivision || !gnDivision) {
+      Alert.alert(
+        "Area required",
+        "Please select your District, DS Division, and GN Division."
+      );
+      return;
+    }
+
+    updateDraft({
+      area: {
+        district,
+        dsDivision,
+        gnDivision,
+      },
     });
+
+    router.push("/auth/register-verification");
   };
 
   return (
@@ -60,18 +168,24 @@ export default function RegisterAreaScreen() {
         <SecureBadge text="Location data is encrypted and secure" />
 
         <View style={styles.formCard}>
-          <SelectField label="District" value="Select your District" />
+          <SelectField
+            label="District"
+            value={district || "Select your District"}
+            onPress={() => setSelectType("district")}
+          />
 
           <SelectField
             label="DS Division"
-            value="Select District first"
-            disabled
+            value={dsDivision || "Select District first"}
+            disabled={!district}
+            onPress={() => setSelectType("ds")}
           />
 
           <SelectField
             label="Grama Niladhari (GN) Division"
-            value="Select DS Division first"
-            disabled
+            value={gnDivision || "Select DS Division first"}
+            disabled={!dsDivision}
+            onPress={() => setSelectType("gn")}
           />
 
           <CoverageMap />
@@ -87,7 +201,67 @@ export default function RegisterAreaScreen() {
           </View>
         </View>
       </ScrollView>
+
+      <OptionModal
+        visible={Boolean(selectType)}
+        title={
+          selectType === "district"
+            ? "Select District"
+            : selectType === "ds"
+            ? "Select DS Division"
+            : "Select GN Division"
+        }
+        options={modalOptions}
+        onClose={() => setSelectType(null)}
+        onSelect={handleSelect}
+      />
     </SafeAreaView>
+  );
+}
+
+function OptionModal({
+  visible,
+  title,
+  options,
+  onClose,
+  onSelect,
+}: {
+  visible: boolean;
+  title: string;
+  options: string[];
+  onClose: () => void;
+  onSelect: (value: string) => void;
+}) {
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <Pressable style={styles.modalCard}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>{title}</Text>
+
+            <Pressable style={styles.modalClose} onPress={onClose}>
+              <Ionicons name="close" size={20} color={colors.text} />
+            </Pressable>
+          </View>
+
+          {options.map((option) => (
+            <Pressable
+              key={option}
+              style={styles.optionRow}
+              onPress={() => onSelect(option)}
+            >
+              <Text style={styles.optionText}>{option}</Text>
+              <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+            </Pressable>
+          ))}
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -290,5 +464,55 @@ const styles = StyleSheet.create({
   },
   nextWrap: {
     flex: 1.25,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.28)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: spacing.lg,
+  },
+  modalCard: {
+    width: "100%",
+    maxHeight: "78%",
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface,
+    padding: spacing.lg,
+    ...softShadow,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing.md,
+  },
+  modalTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  modalClose: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.pill,
+    backgroundColor: "#F4F7F5",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  optionRow: {
+    minHeight: 52,
+    borderRadius: radius.md,
+    backgroundColor: "#F7FAF8",
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  optionText: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: "800",
   },
 });

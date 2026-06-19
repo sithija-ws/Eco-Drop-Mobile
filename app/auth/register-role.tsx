@@ -8,12 +8,12 @@ import {
   PrimaryButton,
   RoleIcon,
 } from "../../components/auth/AuthUI";
+import { useSignup } from "../../context/SignupContext";
+import type { RegisterRole } from "../../types/user";
 import { colors, radius, softShadow, spacing } from "../../constants/theme";
 
-type AccountRole = "resident" | "collector";
-
 const roles: {
-  id: AccountRole;
+  id: RegisterRole;
   title: string;
   icon: React.ComponentProps<typeof MaterialCommunityIcons>["name"];
   description: string;
@@ -23,25 +23,29 @@ const roles: {
     title: "Resident",
     icon: "home-outline",
     description:
-      "I want to manage my household waste, track my eco-impact, and earn rewards for sustainable practices.",
+      "Manage household waste, track pickup status, find smart bins, and earn Eco Drops.",
   },
   {
     id: "collector",
     title: "Collector",
     icon: "truck-outline",
     description:
-      "I am a waste management professional looking to optimize routes, manage pickups, and view analytics.",
+      "Accept nearby jobs, optimize routes, update collection status, and manage earnings.",
   },
 ];
 
 export default function RegisterRoleScreen() {
-  const [selectedRole, setSelectedRole] = useState<AccountRole>("resident");
+  const { draft, updateDraft } = useSignup();
+  const [selectedRole, setSelectedRole] = useState<RegisterRole>(
+    draft.role ?? "resident"
+  );
 
   const handleContinue = () => {
-    router.push({
-      pathname: "/auth/register-info",
-      params: { role: selectedRole },
+    updateDraft({
+      role: selectedRole,
     });
+
+    router.push("/auth/register-info");
   };
 
   return (
@@ -71,7 +75,12 @@ export default function RegisterRoleScreen() {
                 style={[styles.roleCard, selected && styles.roleCardSelected]}
                 onPress={() => setSelectedRole(role.id)}
               >
-                <View style={styles.checkCircle}>
+                <View
+                  style={[
+                    styles.checkCircle,
+                    !selected && styles.checkCircleInactive,
+                  ]}
+                >
                   {selected ? (
                     <Ionicons name="checkmark" size={16} color="#FFFFFF" />
                   ) : null}
@@ -88,8 +97,12 @@ export default function RegisterRoleScreen() {
 
         <PrimaryButton title="Continue" onPress={handleContinue} />
 
-        <Pressable style={styles.helpButton} hitSlop={8}>
-          <Text style={styles.helpText}>Need help choosing?</Text>
+        <Pressable
+          style={styles.helpButton}
+          onPress={() => router.push("/auth/login")}
+          hitSlop={8}
+        >
+          <Text style={styles.helpText}>Already have an account? Login</Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -151,6 +164,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
+  },
+  checkCircleInactive: {
+    backgroundColor: "#E7EEE9",
   },
   roleTitle: {
     marginTop: spacing.md,

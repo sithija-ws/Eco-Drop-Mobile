@@ -1,5 +1,12 @@
 import React, { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
@@ -10,31 +17,33 @@ import {
   PrimaryButton,
   SecureBadge,
 } from "../../components/auth/AuthUI";
+import { loginEcoUser } from "../../services/authService";
+import { getFirebaseErrorMessage } from "../../utils/firebaseErrors";
+import { getHomeRouteForRole } from "../../utils/roleRoutes";
 import { colors, radius, softShadow, spacing } from "../../constants/theme";
 
-type LoginRole = "resident" | "collector" | "admin";
-
-const demoRoles: { id: LoginRole; label: string }[] = [
-  { id: "resident", label: "Resident" },
-  { id: "collector", label: "Collector" },
-  { id: "admin", label: "Admin" },
-];
-
 export default function LoginScreen() {
-  const [role, setRole] = useState<LoginRole>("resident");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
-    if (role === "collector") {
-      router.replace("/collector/dashboard");
+  const handleLogin = async () => {
+    if (!email.trim() || !password) {
+      Alert.alert("Missing details", "Please enter your email and password.");
       return;
     }
 
-    if (role === "admin") {
-      router.replace("/admin/dashboard");
-      return;
-    }
+    try {
+      setLoading(true);
 
-    router.replace("/(resident)/(tabs)/dashboard");
+      const { profile } = await loginEcoUser(email, password);
+
+      router.replace(getHomeRouteForRole(profile.role));
+    } catch (error) {
+      Alert.alert("Login failed", getFirebaseErrorMessage(error));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -64,6 +73,8 @@ export default function LoginScreen() {
               placeholder="you@example.com"
               keyboardType="email-address"
               autoCapitalize="none"
+              value={email}
+              onChangeText={setEmail}
             />
 
             <AuthInput
@@ -72,34 +83,18 @@ export default function LoginScreen() {
               icon="lock-closed-outline"
               placeholder="••••••••"
               secureTextEntry
+              value={password}
+              onChangeText={setPassword}
             />
-
-            <Text style={styles.demoLabel}>Demo login role</Text>
-
-            <View style={styles.roleRow}>
-              {demoRoles.map((item) => {
-                const active = role === item.id;
-
-                return (
-                  <Pressable
-                    key={item.id}
-                    style={[styles.rolePill, active && styles.rolePillActive]}
-                    onPress={() => setRole(item.id)}
-                  >
-                    <Text
-                      style={[styles.roleText, active && styles.roleTextActive]}
-                    >
-                      {item.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
 
             <SecureBadge />
 
             <View style={styles.loginButtonWrap}>
-              <PrimaryButton title="Login" onPress={handleLogin} />
+              <PrimaryButton
+                title="Login"
+                onPress={handleLogin}
+                loading={loading}
+              />
             </View>
 
             <View style={styles.dividerRow}>
@@ -178,39 +173,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.xl,
     backgroundColor: colors.surface,
     ...softShadow,
-  },
-  demoLabel: {
-    color: colors.text,
-    fontSize: 12,
-    fontWeight: "900",
-    marginBottom: spacing.sm,
-  },
-  roleRow: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  rolePill: {
-    flex: 1,
-    height: 36,
-    borderRadius: radius.pill,
-    backgroundColor: "#F4F7F5",
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  rolePillActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  roleText: {
-    color: colors.textSoft,
-    fontSize: 11,
-    fontWeight: "900",
-  },
-  roleTextActive: {
-    color: "#FFFFFF",
   },
   loginButtonWrap: {
     marginTop: spacing.lg,
