@@ -13,6 +13,7 @@ import { colors, radius, softShadow, spacing } from "../../constants/theme";
 type IonIconName = React.ComponentProps<typeof Ionicons>["name"];
 type MaterialIconName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
 
+
 export function EcoLogo({ compact = false }: { compact?: boolean }) {
   return (
     <View style={[styles.logoCircle, compact && styles.logoCircleCompact]}>
