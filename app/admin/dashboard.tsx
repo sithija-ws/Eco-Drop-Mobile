@@ -16,7 +16,7 @@ import { useAuth } from "../../context/AuthContext";
 import {
   listenAdminDashboard,
   type AdminDashboardData,
-} from "../../services/adminService";
+} from "../../services/adminUserService";
 import {
   formatPickupStatus,
   formatWasteCategory,

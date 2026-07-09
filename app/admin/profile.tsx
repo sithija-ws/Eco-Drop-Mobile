@@ -1,4 +1,5 @@
 import React from "react";
+import { router } from "expo-router";
 import {
   Alert,
   Pressable,
@@ -117,12 +118,7 @@ export default function AdminProfileScreen() {
             icon="account-group-outline"
             title="User Management"
             subtitle="Approve collectors and manage account statuses"
-            onPress={() =>
-              Alert.alert(
-                "Coming soon",
-                "User management screen will be connected next."
-              )
-            }
+            onPress={() => router.push("/admin/users")}
           />
 
           <ActionCard

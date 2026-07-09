@@ -87,6 +87,8 @@ export default function AdminTabsLayout() {
         }}
       />
 
+      <Tabs.Screen name="users" options={{ href: null }} />
+
       <Tabs.Screen
         name="profile"
         options={{
