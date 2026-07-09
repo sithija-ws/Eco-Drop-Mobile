@@ -1,6 +1,9 @@
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,142 +12,153 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useAuth } from "../../context/AuthContext";
+import {
+  listenAdminDashboard,
+  type AdminDashboardData,
+} from "../../services/adminService";
+import {
+  formatPickupStatus,
+  formatWasteCategory,
+} from "../../services/dashboardService";
+import type { PickupRequest, PickupStatus, SmartBin } from "../../types/firestore";
 import { colors, radius, softShadow, spacing } from "../../constants/theme";
 
 type MaterialIconName = React.ComponentProps<
   typeof MaterialCommunityIcons
 >["name"];
 
-type QuickAction = {
-  id: string;
-  title: string;
-  icon: MaterialIconName;
-  iconColor: string;
-  iconBg: string;
-  primary?: boolean;
-};
-
-type BinHealth = {
-  id: string;
-  name: string;
-  percent: number;
-  status: string;
-  color: string;
-};
-
-type RequestItem = {
-  id: string;
-  title: string;
-  description: string;
-  badge: string;
-  time: string;
-  icon: MaterialIconName;
-  iconBg: string;
-  iconColor: string;
-  highPriority?: boolean;
-};
-
-const quickActions: QuickAction[] = [
-  {
-    id: "1",
-    title: "Reschedule Route",
-    icon: "routes",
-    iconColor: "#355C7D",
-    iconBg: "#EEF3FF",
-  },
-  {
-    id: "2",
-    title: "Issue Alert",
-    icon: "bullhorn-outline",
-    iconColor: colors.danger,
-    iconBg: "#FFF0F0",
-  },
-  {
-    id: "3",
-    title: "Download Report",
-    icon: "download-outline",
-    iconColor: "#355C7D",
-    iconBg: "#EEF3FF",
-  },
-  {
-    id: "4",
-    title: "New Task",
-    icon: "plus",
-    iconColor: "#FFFFFF",
-    iconBg: "rgba(255,255,255,0.22)",
-    primary: true,
-  },
+const activeStatuses: PickupStatus[] = [
+  "accepted",
+  "collector_on_the_way",
+  "collected",
 ];
 
-const binHealth: BinHealth[] = [
-  {
-    id: "1",
-    name: "Bin ST-01 (Market)",
-    percent: 95,
-    status: "95% Full",
-    color: colors.danger,
-  },
-  {
-    id: "2",
-    name: "Bin RS-12 (Park Road)",
-    percent: 65,
-    status: "65% Full",
-    color: "#4D6258",
-  },
-  {
-    id: "3",
-    name: "Bin RS-15 (School)",
-    percent: 20,
-    status: "20% Full",
-    color: colors.primary,
-  },
+const openStatuses: PickupStatus[] = [
+  "submitted",
+  "waiting_for_collector",
+  "accepted",
+  "collector_on_the_way",
+  "collected",
 ];
 
-const requests: RequestItem[] = [
-  {
-    id: "1",
-    title: "Missed Pickup - Lane 4",
-    description: "Resident reported bin not cleared...",
-    badge: "High Priority",
-    time: "2h ago",
-    icon: "alert-outline",
-    iconBg: "#E9F3FF",
-    iconColor: "#5A7FA8",
-    highPriority: true,
-  },
-  {
-    id: "2",
-    title: "Bulk E-Waste Pickup",
-    description: "Requested special transport for old...",
-    badge: "Review",
-    time: "5h ago",
-    icon: "recycle",
-    iconBg: "#EAF9F0",
-    iconColor: colors.primaryDark,
-  },
-  {
-    id: "3",
-    title: "Schedule Inquiry",
-    description: "Asking about holiday collection times.",
-    badge: "Info",
-    time: "1d ago",
-    icon: "help",
-    iconBg: "#E7F1FF",
-    iconColor: "#5A7FA8",
-  },
-];
+const initialData: AdminDashboardData = {
+  users: [],
+  pickupRequests: [],
+  smartBins: [],
+  reports: [],
+};
 
 export default function AdminDashboardScreen() {
+  const { profile, refreshProfile } = useAuth();
+
+  const [data, setData] = useState<AdminDashboardData>(initialData);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+
+    const unsubscribe = listenAdminDashboard(
+      (nextData) => {
+        setData(nextData);
+        setLoading(false);
+      },
+      (error) => {
+        console.warn("Admin dashboard listener error", error);
+        setLoading(false);
+      }
+    );
+
+    return unsubscribe;
+  }, []);
+
+  const stats = useMemo(() => {
+    const totalPickups = data.pickupRequests.length;
+
+    const completedPickups = data.pickupRequests.filter(
+      (item) => item.status === "completed"
+    ).length;
+
+    const openPickups = data.pickupRequests.filter((item) =>
+      openStatuses.includes(item.status)
+    ).length;
+
+    const activeCollectors = data.users.filter(
+      (user) => user.role === "collector" && user.status === "active"
+    ).length;
+
+    const pendingCollectors = data.users.filter(
+      (user) => user.role === "collector" && user.status === "pending"
+    ).length;
+
+    const residents = data.users.filter((user) => user.role === "resident").length;
+
+    const overflowBins = data.smartBins.filter(
+      (bin) => Number(bin.fillLevel ?? 0) >= 85
+    ).length;
+
+    const openReports = data.reports.filter(
+      (report) => report.status !== "resolved"
+    ).length;
+
+    return {
+      totalPickups,
+      completedPickups,
+      openPickups,
+      activeCollectors,
+      pendingCollectors,
+      residents,
+      overflowBins,
+      openReports,
+    };
+  }, [data]);
+
+  const activeRoute = useMemo(
+    () =>
+      data.pickupRequests.find((request) =>
+        activeStatuses.includes(request.status)
+      ) ?? null,
+    [data.pickupRequests]
+  );
+
+  const requestQueue = useMemo(
+    () =>
+      data.pickupRequests
+        .filter((request) => openStatuses.includes(request.status))
+        .slice(0, 5),
+    [data.pickupRequests]
+  );
+
+  const criticalBins = useMemo(
+    () =>
+      [...data.smartBins]
+        .sort((a, b) => Number(b.fillLevel ?? 0) - Number(a.fillLevel ?? 0))
+        .slice(0, 4),
+    [data.smartBins]
+  );
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await refreshProfile();
+    setRefreshing(false);
+  };
+
+  const areaTitle =
+    profile?.area?.gnDivision ?? profile?.area?.district ?? "Admin Area";
+
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
       <ScrollView
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Header */}
         <View style={styles.headerBlock}>
           <Text style={styles.eyebrow}>Area Admin Dashboard</Text>
-          <Text style={styles.areaTitle}>Colombo North - 04</Text>
+          <Text style={styles.areaTitle}>{areaTitle}</Text>
 
           <View style={styles.liveBadge}>
             <View style={styles.liveIconCircle}>
@@ -156,161 +170,255 @@ export default function AdminDashboardScreen() {
             </View>
 
             <View>
-              <Text style={styles.liveTitle}>GN Office Active</Text>
+              <Text style={styles.liveTitle}>
+                {profile?.fullName ?? "Admin"}
+              </Text>
 
               <View style={styles.liveRow}>
                 <View style={styles.liveDot} />
-                <Text style={styles.liveText}>Tracking Live</Text>
+                <Text style={styles.liveText}>Firebase Live</Text>
               </View>
             </View>
           </View>
         </View>
 
-        {/* Quick Actions */}
+        {loading ? (
+          <View style={styles.loadingCard}>
+            <ActivityIndicator color={colors.primaryDark} />
+            <Text style={styles.loadingText}>Loading live admin data...</Text>
+          </View>
+        ) : null}
+
         <View style={styles.quickGrid}>
-          {quickActions.map((action) => (
-            <QuickActionCard key={action.id} action={action} />
-          ))}
+          <QuickActionCard
+            title="Reschedule Route"
+            icon="routes"
+            color="#355C7D"
+            bg="#EEF3FF"
+            onPress={() =>
+              Alert.alert(
+                "Coming soon",
+                "Route scheduling will be connected later."
+              )
+            }
+          />
+
+          <QuickActionCard
+            title="Issue Alert"
+            icon="bullhorn-outline"
+            color={colors.danger}
+            bg="#FFF0F0"
+            onPress={() =>
+              Alert.alert(
+                "Coming soon",
+                "Admin alerts will be connected later."
+              )
+            }
+          />
+
+          <QuickActionCard
+            title="Download Report"
+            icon="download-outline"
+            color="#355C7D"
+            bg="#EEF3FF"
+            onPress={() =>
+              Alert.alert("Coming soon", "PDF/CSV reports will be added later.")
+            }
+          />
+
+          <QuickActionCard
+            title="Review Queue"
+            icon="clipboard-list-outline"
+            color="#FFFFFF"
+            bg={colors.primary}
+            primary
+            onPress={() =>
+              Alert.alert(
+                "Requests Queue",
+                `${requestQueue.length} active request(s) need monitoring.`
+              )
+            }
+          />
         </View>
 
-        {/* Stats */}
         <View style={styles.statsGrid}>
           <StatCard
             label="Total Pickups"
-            value="142"
-            helper="+12% vs yesterday"
+            value={String(stats.totalPickups)}
+            helper={`${stats.completedPickups} completed`}
             icon="truck-outline"
             iconColor={colors.primaryDeep}
           />
 
           <StatCard
             label="Active Teams"
-            value="08"
-            helper="2 routes pending"
+            value={String(stats.activeCollectors)}
+            helper={`${stats.pendingCollectors} pending approvals`}
             icon="account-group-outline"
             iconColor="#355C7D"
           />
         </View>
 
-        {/* Overflow Alerts */}
-        <View style={styles.overflowCard}>
-          <View style={styles.overflowTopRow}>
-            <Text style={styles.overflowLabel}>Overflow Alerts</Text>
+        <View style={styles.statsGrid}>
+          <StatCard
+            label="Residents"
+            value={String(stats.residents)}
+            helper="registered residents"
+            icon="home-account"
+            iconColor={colors.primaryDeep}
+          />
+
+          <StatCard
+            label="Open Requests"
+            value={String(stats.openPickups)}
+            helper="needs monitoring"
+            icon="clipboard-list-outline"
+            iconColor="#355C7D"
+          />
+        </View>
+
+        <View
+          style={[
+            styles.alertCard,
+            stats.overflowBins === 0 && styles.safeAlertCard,
+          ]}
+        >
+          <View style={styles.alertTopRow}>
+            <Text style={styles.alertLabel}>Overflow Alerts</Text>
 
             <MaterialCommunityIcons
-              name="alert-outline"
+              name={
+                stats.overflowBins > 0 ? "alert-outline" : "check-circle-outline"
+              }
               size={26}
-              color={colors.danger}
+              color={stats.overflowBins > 0 ? colors.danger : colors.primaryDark}
             />
           </View>
 
-          <Text style={styles.overflowValue}>03</Text>
-          <Text style={styles.overflowHelper}>Require immediate action</Text>
+          <Text style={styles.alertValue}>{stats.overflowBins}</Text>
+
+          <Text
+            style={[
+              styles.alertHelper,
+              stats.overflowBins === 0 && styles.safeAlertText,
+            ]}
+          >
+            {stats.overflowBins > 0
+              ? "Require immediate action"
+              : "No critical bin overflow"}
+          </Text>
         </View>
 
-        {/* Tractor Tracking */}
-        <View style={styles.tractorCard}>
-          <View style={styles.tractorTopRow}>
-            <View style={styles.tractorIconWrap}>
-              <MaterialCommunityIcons
-                name="tractor"
-                size={29}
-                color={colors.primaryDeep}
-              />
-            </View>
+        {activeRoute ? (
+          <ActiveRouteCard request={activeRoute} />
+        ) : (
+          <EmptyCard
+            icon="truck-check-outline"
+            title="No active collection route"
+            subtitle="Accepted or in-progress pickup requests will appear here."
+          />
+        )}
 
-            <View style={styles.tractorTextBlock}>
-              <Text style={styles.tractorTitle}>Tractor Alpha-1</Text>
-              <Text style={styles.tractorSubtitle}>Route: Sector B</Text>
-              <Text style={styles.tractorSubtitle}>(Residential)</Text>
-            </View>
-
-            <View style={styles.etaBlock}>
-              <Text style={styles.etaLabel}>ETA Next Sector</Text>
-              <Text style={styles.etaValue}>14 mins</Text>
-            </View>
-          </View>
-
-          <MapPreview />
-        </View>
-
-        {/* Smart Bin Health */}
         <View style={styles.healthCard}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Smart Bin Health</Text>
-
-            <Pressable hitSlop={8}>
-              <Text style={styles.sectionAction}>View All</Text>
-            </Pressable>
+            <Text style={styles.sectionAction}>{data.smartBins.length} bins</Text>
           </View>
 
-          <View style={styles.binList}>
-            {binHealth.map((item) => (
-              <BinHealthRow key={item.id} item={item} />
-            ))}
-          </View>
+          {criticalBins.length > 0 ? (
+            <View style={styles.binList}>
+              {criticalBins.map((item) => (
+                <BinHealthRow key={item.id} item={item} />
+              ))}
+            </View>
+          ) : (
+            <MiniEmpty
+              icon="trash-can-outline"
+              text="No smart bins added yet."
+            />
+          )}
         </View>
 
-        {/* Requests Queue */}
         <View style={styles.queueCard}>
           <View style={styles.queueHeaderRow}>
             <Text style={styles.sectionTitle}>Requests Queue</Text>
 
             <View style={styles.countBadge}>
-              <Text style={styles.countBadgeText}>4</Text>
+              <Text style={styles.countBadgeText}>{requestQueue.length}</Text>
             </View>
           </View>
 
-          <View style={styles.requestList}>
-            {requests.map((item) => (
-              <RequestRow key={item.id} item={item} />
-            ))}
+          {requestQueue.length > 0 ? (
+            <View style={styles.requestList}>
+              {requestQueue.map((item) => (
+                <RequestRow key={item.id} item={item} />
+              ))}
+            </View>
+          ) : (
+            <MiniEmpty
+              icon="clipboard-check-outline"
+              text="No open pickup requests right now."
+            />
+          )}
+        </View>
+
+        <View style={styles.reportCard}>
+          <View style={styles.reportIconWrap}>
+            <MaterialCommunityIcons
+              name="file-chart-outline"
+              size={24}
+              color={colors.primaryDark}
+            />
           </View>
 
-          <Pressable style={styles.viewAllButton}>
-            <Text style={styles.viewAllText}>View All Requests</Text>
-          </Pressable>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.reportTitle}>Reports & Complaints</Text>
+            <Text style={styles.reportText}>
+              {stats.openReports} open report(s) in Firestore.
+            </Text>
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function QuickActionCard({ action }: { action: QuickAction }) {
-  if (action.primary) {
-    return (
-      <Pressable
-        style={({ pressed }) => [
-          styles.quickCardPrimary,
-          pressed && styles.pressed,
-        ]}
-      >
-        <View style={[styles.quickIconCircle, { backgroundColor: action.iconBg }]}>
-          <MaterialCommunityIcons
-            name={action.icon}
-            size={28}
-            color={action.iconColor}
-          />
-        </View>
-
-        <Text style={styles.quickTitlePrimary}>{action.title}</Text>
-      </Pressable>
-    );
-  }
-
+function QuickActionCard({
+  title,
+  icon,
+  color,
+  bg,
+  primary,
+  onPress,
+}: {
+  title: string;
+  icon: MaterialIconName;
+  color: string;
+  bg: string;
+  primary?: boolean;
+  onPress: () => void;
+}) {
   return (
     <Pressable
-      style={({ pressed }) => [styles.quickCard, pressed && styles.pressed]}
+      style={({ pressed }) => [
+        styles.quickCard,
+        primary && styles.quickCardPrimary,
+        pressed && styles.pressed,
+      ]}
+      onPress={onPress}
     >
-      <View style={[styles.quickIconCircle, { backgroundColor: action.iconBg }]}>
-        <MaterialCommunityIcons
-          name={action.icon}
-          size={25}
-          color={action.iconColor}
-        />
+      <View
+        style={[
+          styles.quickIconCircle,
+          { backgroundColor: primary ? "rgba(255,255,255,0.22)" : bg },
+        ]}
+      >
+        <MaterialCommunityIcons name={icon} size={25} color={color} />
       </View>
 
-      <Text style={styles.quickTitle}>{action.title}</Text>
+      <Text style={[styles.quickTitle, primary && styles.quickTitlePrimary]}>
+        {title}
+      </Text>
     </Pressable>
   );
 }
@@ -332,96 +440,84 @@ function StatCard({
     <View style={styles.statCard}>
       <View style={styles.statTopRow}>
         <Text style={styles.statLabel}>{label}</Text>
-
         <MaterialCommunityIcons name={icon} size={27} color={iconColor} />
       </View>
 
       <Text style={styles.statValue}>{value}</Text>
-
-      <View style={styles.statHelperRow}>
-        <MaterialCommunityIcons
-          name="swap-vertical"
-          size={15}
-          color={colors.primaryDeep}
-        />
-        <Text style={styles.statHelper}>{helper}</Text>
-      </View>
+      <Text style={styles.statHelper}>{helper}</Text>
     </View>
   );
 }
 
-function MapPreview() {
-  const pins = [
-    { left: "43%", top: "25%" },
-    { left: "61%", top: "36%" },
-    { left: "35%", top: "56%" },
-    { left: "70%", top: "61%" },
-    { left: "28%", top: "76%" },
-    { left: "51%", top: "73%" },
-  ] as const;
-
+function ActiveRouteCard({ request }: { request: PickupRequest }) {
   return (
-    <LinearGradient
-      colors={["#073331", "#0B4B45", "#082928"]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={styles.mapPreview}
-    >
-      <View style={styles.mapTopBar}>
-        <View style={styles.mapStatusPill}>
-          <View style={styles.completedDot} />
-          <Text style={styles.mapStatusText}>Completed</Text>
+    <View style={styles.routeCard}>
+      <View style={styles.routeTopRow}>
+        <View style={styles.routeIconWrap}>
+          <MaterialCommunityIcons
+            name="truck-fast-outline"
+            size={28}
+            color={colors.primaryDeep}
+          />
         </View>
 
-        <View style={styles.mapStatusPillLight}>
-          <View style={styles.progressDot} />
-          <Text style={styles.mapStatusText}>In Progress</Text>
+        <View style={styles.routeTextBlock}>
+          <Text style={styles.routeTitle}>
+            {request.collectorName ?? "Collector assigned"}
+          </Text>
+
+          <Text style={styles.routeSubtitle}>
+            {formatWasteCategory(request.wasteCategory)}
+          </Text>
+
+          <Text style={styles.routeSubtitle}>
+            {request.location?.address ??
+              request.area?.gnDivision ??
+              "Pickup location"}
+          </Text>
+        </View>
+
+        <View style={styles.statusPill}>
+          <Text style={styles.statusPillText}>
+            {formatPickupStatus(request.status)}
+          </Text>
         </View>
       </View>
 
-      <View style={styles.mapGrid}>
-        <View style={[styles.mapGridLineHorizontal, { top: "18%" }]} />
-        <View style={[styles.mapGridLineHorizontal, { top: "36%" }]} />
-        <View style={[styles.mapGridLineHorizontal, { top: "54%" }]} />
-        <View style={[styles.mapGridLineHorizontal, { top: "72%" }]} />
+      <LinearGradient
+        colors={["#073331", "#0B4B45", "#082928"]}
+        style={styles.mapPreview}
+      >
+        <View style={styles.routeLineOne} />
+        <View style={styles.routeLineTwo} />
 
-        <View style={[styles.mapGridLineVertical, { left: "22%" }]} />
-        <View style={[styles.mapGridLineVertical, { left: "44%" }]} />
-        <View style={[styles.mapGridLineVertical, { left: "66%" }]} />
-        <View style={[styles.mapGridLineVertical, { left: "82%" }]} />
-      </View>
-
-      <View style={styles.routeOne} />
-      <View style={styles.routeTwo} />
-      <View style={styles.routeThree} />
-
-      {pins.map((pin, index) => (
-        <View
-          key={index}
-          style={[styles.tinyPin, { left: pin.left, top: pin.top }]}
-        />
-      ))}
-
-      <View style={styles.tractorMarker}>
-        <MaterialCommunityIcons
-          name="tractor"
-          size={23}
-          color="#FFFFFF"
-        />
-      </View>
-    </LinearGradient>
+        <View style={styles.mapMarker}>
+          <MaterialCommunityIcons name="truck" size={22} color="#FFFFFF" />
+        </View>
+      </LinearGradient>
+    </View>
   );
 }
 
-function BinHealthRow({ item }: { item: BinHealth }) {
-  const width = `${item.percent}%` as `${number}%`;
+function BinHealthRow({ item }: { item: SmartBin }) {
+  const percentage = Math.max(
+    0,
+    Math.min(100, Math.round(Number(item.fillLevel ?? 0)))
+  );
+
+  const fillColor =
+    percentage >= 85
+      ? colors.danger
+      : percentage >= 60
+      ? colors.warning
+      : colors.primary;
 
   return (
     <View style={styles.binRow}>
       <View style={styles.binHeaderRow}>
         <Text style={styles.binName}>{item.name}</Text>
-        <Text style={[styles.binStatus, { color: item.color }]}>
-          {item.status}
+        <Text style={[styles.binStatus, { color: fillColor }]}>
+          {percentage}% Full
         </Text>
       </View>
 
@@ -430,8 +526,8 @@ function BinHealthRow({ item }: { item: BinHealth }) {
           style={[
             styles.binFill,
             {
-              width,
-              backgroundColor: item.color,
+              width: `${percentage}%` as `${number}%`,
+              backgroundColor: fillColor,
             },
           ]}
         />
@@ -440,46 +536,88 @@ function BinHealthRow({ item }: { item: BinHealth }) {
   );
 }
 
-function RequestRow({ item }: { item: RequestItem }) {
+function RequestRow({ item }: { item: PickupRequest }) {
   return (
-    <Pressable
-      style={({ pressed }) => [styles.requestRow, pressed && styles.pressed]}
-    >
-      <View style={[styles.requestIconWrap, { backgroundColor: item.iconBg }]}>
+    <View style={styles.requestRow}>
+      <View style={styles.requestIconWrap}>
         <MaterialCommunityIcons
-          name={item.icon}
+          name="recycle"
           size={20}
-          color={item.iconColor}
+          color={colors.primaryDark}
         />
       </View>
 
       <View style={styles.requestContent}>
-        <Text style={styles.requestTitle}>{item.title}</Text>
-        <Text style={styles.requestDescription}>{item.description}</Text>
+        <Text style={styles.requestTitle}>
+          {formatWasteCategory(item.wasteCategory)}
+        </Text>
+
+        <Text style={styles.requestDescription}>
+          {item.residentName ?? "Resident"} •{" "}
+          {item.location?.address ?? item.area?.gnDivision ?? "Location"}
+        </Text>
 
         <View style={styles.requestMetaRow}>
-          <View
-            style={[
-              styles.requestBadge,
-              item.highPriority && styles.highPriorityBadge,
-            ]}
-          >
-            <Text
-              style={[
-                styles.requestBadgeText,
-                item.highPriority && styles.highPriorityText,
-              ]}
-            >
-              {item.badge}
+          <View style={styles.requestBadge}>
+            <Text style={styles.requestBadgeText}>
+              {formatPickupStatus(item.status)}
             </Text>
           </View>
 
-          <View style={styles.timeBadge}>
-            <Text style={styles.timeBadgeText}>{item.time}</Text>
-          </View>
+          {item.price ? (
+            <View style={styles.timeBadge}>
+              <Text style={styles.timeBadgeText}>Rs. {item.price}</Text>
+            </View>
+          ) : null}
         </View>
       </View>
-    </Pressable>
+    </View>
+  );
+}
+
+function EmptyCard({
+  icon,
+  title,
+  subtitle,
+}: {
+  icon: MaterialIconName;
+  title: string;
+  subtitle: string;
+}) {
+  return (
+    <View style={styles.emptyCard}>
+      <View style={styles.emptyIconWrap}>
+        <MaterialCommunityIcons
+          name={icon}
+          size={28}
+          color={colors.primaryDark}
+        />
+      </View>
+
+      <View style={{ flex: 1 }}>
+        <Text style={styles.emptyTitle}>{title}</Text>
+        <Text style={styles.emptySubtitle}>{subtitle}</Text>
+      </View>
+    </View>
+  );
+}
+
+function MiniEmpty({
+  icon,
+  text,
+}: {
+  icon: MaterialIconName;
+  text: string;
+}) {
+  return (
+    <View style={styles.miniEmpty}>
+      <MaterialCommunityIcons
+        name={icon}
+        size={22}
+        color={colors.primaryDark}
+      />
+      <Text style={styles.miniEmptyText}>{text}</Text>
+    </View>
   );
 }
 
@@ -553,6 +691,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "900",
   },
+  loadingCard: {
+    minHeight: 90,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+    ...softShadow,
+  },
+  loadingText: {
+    color: colors.textSoft,
+    fontSize: 13,
+    fontWeight: "700",
+  },
   quickGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -570,14 +723,7 @@ const styles = StyleSheet.create({
     ...softShadow,
   },
   quickCardPrimary: {
-    width: "48.6%",
-    minHeight: 106,
-    borderRadius: radius.lg,
     backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: spacing.md,
-    ...softShadow,
   },
   quickIconCircle: {
     width: 52,
@@ -595,9 +741,7 @@ const styles = StyleSheet.create({
   },
   quickTitlePrimary: {
     color: "#FFFFFF",
-    fontSize: 15,
     fontWeight: "900",
-    textAlign: "center",
   },
   pressed: {
     opacity: 0.88,
@@ -637,19 +781,13 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: -1,
   },
-  statHelperRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
   statHelper: {
     color: colors.primaryDeep,
     fontSize: 12,
     fontWeight: "900",
     lineHeight: 14,
-    maxWidth: 96,
   },
-  overflowCard: {
+  alertCard: {
     minHeight: 138,
     borderRadius: radius.xl,
     backgroundColor: colors.surface,
@@ -659,189 +797,107 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
     ...softShadow,
   },
-  overflowTopRow: {
+  safeAlertCard: {
+    borderLeftColor: colors.primaryDark,
+  },
+  alertTopRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  overflowLabel: {
+  alertLabel: {
     color: "#172B4D",
     fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1.7,
     textTransform: "uppercase",
   },
-  overflowValue: {
+  alertValue: {
     marginTop: spacing.lg,
     color: "#070A0D",
     fontSize: 34,
     fontWeight: "900",
   },
-  overflowHelper: {
+  alertHelper: {
     color: colors.danger,
     fontSize: 13,
     fontWeight: "900",
   },
-  tractorCard: {
+  safeAlertText: {
+    color: colors.primaryDeep,
+  },
+  routeCard: {
     borderRadius: radius.xl,
     backgroundColor: colors.surface,
     overflow: "hidden",
     marginBottom: spacing.lg,
     ...softShadow,
   },
-  tractorTopRow: {
+  routeTopRow: {
     flexDirection: "row",
     alignItems: "center",
-    padding: spacing.xl,
+    padding: spacing.lg,
+    gap: spacing.md,
   },
-  tractorIconWrap: {
+  routeIconWrap: {
     width: 48,
     height: 48,
     borderRadius: radius.pill,
     backgroundColor: "#DFF8E9",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: spacing.md,
   },
-  tractorTextBlock: {
+  routeTextBlock: {
     flex: 1,
   },
-  tractorTitle: {
+  routeTitle: {
     color: colors.text,
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: "900",
   },
-  tractorSubtitle: {
-    color: "#172B4D",
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: "700",
-  },
-  etaBlock: {
-    alignItems: "flex-end",
-    maxWidth: 84,
-  },
-  etaLabel: {
-    color: "#172B4D",
+  routeSubtitle: {
+    color: colors.textSoft,
     fontSize: 12,
-    fontWeight: "900",
-    textTransform: "uppercase",
-    letterSpacing: 1.1,
-    textAlign: "right",
+    fontWeight: "700",
+    marginTop: 2,
   },
-  etaValue: {
-    marginTop: spacing.xs,
+  statusPill: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    backgroundColor: "#DDFBE7",
+  },
+  statusPillText: {
     color: colors.primaryDeep,
-    fontSize: 22,
+    fontSize: 10,
     fontWeight: "900",
   },
   mapPreview: {
-    height: 266,
+    height: 190,
     overflow: "hidden",
-    backgroundColor: "#073331",
   },
-  mapTopBar: {
+  routeLineOne: {
     position: "absolute",
-    zIndex: 5,
-    top: spacing.lg,
-    left: spacing.lg,
-    borderRadius: radius.md,
-    backgroundColor: "rgba(255,255,255,0.96)",
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    gap: 5,
-  },
-  mapStatusPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  mapStatusPillLight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  completedDot: {
-    width: 13,
-    height: 13,
-    borderRadius: radius.pill,
-    backgroundColor: colors.primary,
-  },
-  progressDot: {
-    width: 13,
-    height: 13,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: "#0CA6A6",
-  },
-  mapStatusText: {
-    color: colors.text,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  mapGrid: {
-    position: "absolute",
+    width: "70%",
+    height: 3,
     left: "15%",
-    right: "15%",
-    top: "10%",
-    bottom: "8%",
-    borderWidth: 1,
-    borderColor: "rgba(68, 255, 222, 0.13)",
-  },
-  mapGridLineHorizontal: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: "rgba(68,255,222,0.08)",
-  },
-  mapGridLineVertical: {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    width: 1,
-    backgroundColor: "rgba(68,255,222,0.08)",
-  },
-  routeOne: {
-    position: "absolute",
-    width: "58%",
-    height: 2,
-    left: "20%",
-    top: "49%",
+    top: "46%",
     backgroundColor: "rgba(50,255,208,0.34)",
-    transform: [{ rotate: "-25deg" }],
+    transform: [{ rotate: "-22deg" }],
   },
-  routeTwo: {
+  routeLineTwo: {
     position: "absolute",
-    width: "38%",
-    height: 2,
-    right: "18%",
-    top: "36%",
+    width: "50%",
+    height: 3,
+    right: "15%",
+    top: "54%",
     backgroundColor: "rgba(50,255,208,0.22)",
     transform: [{ rotate: "20deg" }],
   },
-  routeThree: {
+  mapMarker: {
     position: "absolute",
-    width: "43%",
-    height: 2,
-    left: "25%",
-    bottom: "25%",
-    backgroundColor: "rgba(50,255,208,0.22)",
-    transform: [{ rotate: "18deg" }],
-  },
-  tinyPin: {
-    position: "absolute",
-    width: 8,
-    height: 8,
-    borderRadius: radius.pill,
-    backgroundColor: "#21E6C1",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.75)",
-  },
-  tractorMarker: {
-    position: "absolute",
-    left: "48%",
-    top: "43%",
+    left: "50%",
+    top: "47%",
     width: 44,
     height: 44,
     marginLeft: -22,
@@ -913,6 +969,7 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     borderRadius: radius.xl,
     backgroundColor: colors.surface,
+    marginBottom: spacing.lg,
     ...softShadow,
   },
   queueHeaderRow: {
@@ -952,6 +1009,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#EAF9F0",
   },
   requestContent: {
     flex: 1,
@@ -985,12 +1043,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     textTransform: "uppercase",
   },
-  highPriorityBadge: {
-    backgroundColor: "#FFE7E7",
-  },
-  highPriorityText: {
-    color: colors.danger,
-  },
   timeBadge: {
     borderRadius: 6,
     backgroundColor: "#D9E0E4",
@@ -1003,18 +1055,76 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     textTransform: "uppercase",
   },
-  viewAllButton: {
-    height: 48,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: "#B8C9BE",
+  emptyCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface,
+    marginBottom: spacing.lg,
+    ...softShadow,
+  },
+  emptyIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceSoft,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: spacing.lg,
   },
-  viewAllText: {
-    color: "#172B4D",
+  emptyTitle: {
+    color: colors.text,
     fontSize: 15,
+    fontWeight: "900",
+  },
+  emptySubtitle: {
+    marginTop: 3,
+    color: colors.textSoft,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "700",
+  },
+  miniEmpty: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    backgroundColor: "#F7FAF8",
+  },
+  miniEmptyText: {
+    flex: 1,
+    color: colors.textSoft,
+    fontSize: 13,
     fontWeight: "800",
+  },
+  reportCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface,
+    ...softShadow,
+  },
+  reportIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reportTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  reportText: {
+    marginTop: 3,
+    color: colors.textSoft,
+    fontSize: 12,
+    fontWeight: "700",
   },
 });
