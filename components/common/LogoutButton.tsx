@@ -10,42 +10,38 @@ export default function LogoutButton() {
   const [loading, setLoading] = useState(false);
 
   const handleLogout = () => {
-    Alert.alert(
-      "Logout",
-      "Are you sure you want to logout?",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
+    Alert.alert("Logout", "Are you sure you want to logout from Eco Drop?", [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Logout",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            setLoading(true);
+            await logout();
+            router.replace("/auth/login");
+          } catch (error) {
+            Alert.alert("Logout failed", "Please try again.");
+          } finally {
+            setLoading(false);
+          }
         },
-        {
-          text: "Logout",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setLoading(true);
-              await logout();
-              router.replace("/auth/login");
-            } catch (error) {
-              Alert.alert("Logout failed", "Please try again.");
-            } finally {
-              setLoading(false);
-            }
-          },
-        },
-      ]
-    );
+      },
+    ]);
   };
 
   return (
     <Pressable
+      disabled={loading}
       style={({ pressed }) => [
         styles.button,
         pressed && styles.pressed,
         loading && styles.disabled,
       ]}
       onPress={handleLogout}
-      disabled={loading}
     >
       <Ionicons name="log-out-outline" size={18} color="#FFFFFF" />
       <Text style={styles.text}>{loading ? "Logging out..." : "Logout"}</Text>
@@ -55,9 +51,9 @@ export default function LogoutButton() {
 
 const styles = StyleSheet.create({
   button: {
-    height: 44,
+    height: 48,
     paddingHorizontal: spacing.md,
-    borderRadius: radius.pill,
+    borderRadius: radius.md,
     backgroundColor: colors.danger,
     flexDirection: "row",
     alignItems: "center",
@@ -66,7 +62,7 @@ const styles = StyleSheet.create({
   },
   text: {
     color: "#FFFFFF",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "900",
   },
   pressed: {
