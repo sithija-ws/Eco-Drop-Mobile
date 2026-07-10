@@ -87,8 +87,6 @@ export default function AdminTabsLayout() {
         }}
       />
 
-      <Tabs.Screen name="users" options={{ href: null }} />
-
       <Tabs.Screen
         name="profile"
         options={{
@@ -103,10 +101,20 @@ export default function AdminTabsLayout() {
         }}
       />
 
-      {/* If you already have users.tsx and reports.tsx, keep these hidden routes. */}
-      {/* If you do NOT have these files, remove these two lines. */}
-      <Tabs.Screen name="users" options={{ href: null }} />
-      <Tabs.Screen name="reports" options={{ href: null }} />
+      {/* Hidden routes */}
+      <Tabs.Screen
+        name="users"
+        options={{
+          href: null,
+        }}
+      />
+
+      <Tabs.Screen
+        name="reports"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }
