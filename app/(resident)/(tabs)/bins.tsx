@@ -148,13 +148,13 @@ function MapPreview({ bins }: { bins: SmartBin[] }) {
 
       {bins.slice(0, 7).map((bin, index) => {
         const positions = [
-          { left: "18%", top: "30%" },
-          { left: "42%", top: "50%" },
-          { left: "68%", top: "34%" },
-          { left: "78%", top: "67%" },
-          { left: "26%", top: "72%" },
-          { left: "52%", top: "22%" },
-          { left: "57%", top: "76%" },
+          { left: "18%" as const, top: "30%" as const },
+          { left: "42%" as const, top: "50%" as const },
+          { left: "68%" as const, top: "34%" as const },
+          { left: "78%" as const, top: "67%" as const },
+          { left: "26%" as const, top: "72%" as const },
+          { left: "52%" as const, top: "22%" as const },
+          { left: "57%" as const, top: "76%" as const },
         ];
         const fill = Number(bin.fillLevel ?? 0);
         return <View key={bin.id} style={[styles.mapPin, positions[index], { backgroundColor: getBinFillColor(fill) }]} />;
