@@ -2,6 +2,7 @@
   "expo": {
     "name": "Eco-Drop",
     "slug": "Eco-Drop",
+    "scheme": "eco-drop",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

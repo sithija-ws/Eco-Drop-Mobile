@@ -85,3 +85,37 @@ export type WasteReport = {
   createdAt?: FirestoreDate;
   updatedAt?: FirestoreDate;
 };
+
+export type DayOfWeek = "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday" | "Saturday" | "Sunday";
+
+export type CollectionSchedule = {
+  id: string;
+  title: string;
+  gnDivision: string;
+  district?: string;
+  wasteCategory: WasteCategory | "all";
+  dayOfWeek: DayOfWeek;
+  timeSlot: string; // e.g. "08:00 AM - 11:00 AM"
+  assignedCollectorName?: string;
+  assignedCollectorId?: string;
+  status: "active" | "paused";
+  createdAt?: FirestoreDate;
+  updatedAt?: FirestoreDate;
+};
+
+export type RewardCategory = "voucher" | "utility" | "eco_product" | "transit";
+
+export type RewardItem = {
+  id: string;
+  title: string;
+  description: string;
+  category: RewardCategory;
+  costInEcoDrops: number;
+  originalValueLKR?: number;
+  availableQuantity: number;
+  imageUrl?: string;
+  sponsorName?: string;
+  status: "active" | "out_of_stock" | "inactive";
+  createdAt?: FirestoreDate;
+  updatedAt?: FirestoreDate;
+};
