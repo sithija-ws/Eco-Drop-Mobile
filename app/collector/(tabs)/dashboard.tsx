@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -325,6 +326,25 @@ function ActiveJobCard({
   job: PickupRequest;
   onAdvanceStatus: () => void;
 }) {
+  const handleCall = () => {
+    if (!job.residentPhone) {
+      Alert.alert("No phone", "Resident phone number is not available.");
+      return;
+    }
+    Linking.openURL(`tel:${job.residentPhone}`).catch(() => {
+      Alert.alert("Error", "Cannot place call.");
+    });
+  };
+
+  const handleNavigate = () => {
+    const address = job.location?.address ?? job.area?.gnDivision;
+    if (!address) return;
+    const query = encodeURIComponent(address);
+    Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${query}`).catch(() => {
+      Alert.alert("Error", "Could not open map navigation.");
+    });
+  };
+
   return (
     <View style={styles.activeJobCard}>
       <View style={styles.activeJobTop}>
@@ -363,7 +383,11 @@ function ActiveJobCard({
           <Text style={styles.navigateText}>Update Status</Text>
         </Pressable>
 
-        <Pressable style={styles.callButton}>
+        <Pressable style={styles.callButton} onPress={handleNavigate}>
+          <Ionicons name="navigate-outline" size={18} color={colors.primaryDeep} />
+        </Pressable>
+
+        <Pressable style={styles.callButton} onPress={handleCall}>
           <Ionicons name="call-outline" size={18} color={colors.primaryDeep} />
         </Pressable>
       </View>

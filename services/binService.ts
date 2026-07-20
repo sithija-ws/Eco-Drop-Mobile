@@ -129,6 +129,14 @@ export async function updateSmartBinFillLevel(binId: string, fillLevel: number) 
   });
 }
 
+export async function emptySmartBin(binId: string) {
+  await updateDoc(doc(db, "smartBins", binId), {
+    fillLevel: 0,
+    lastEmptiedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
 export async function updateSmartBinStatus(binId: string, status: SmartBinStatus) {
   await updateDoc(doc(db, "smartBins", binId), {
     status,
