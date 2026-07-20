@@ -41,7 +41,11 @@ export function listenCollectionSchedules(
       const items = snapshot.docs.map(mapScheduleDoc);
       onData(items);
     },
-    (error) => onError?.(error)
+    (error) => {
+      console.warn("Collection schedules permission warning:", error.message);
+      onData([]);
+      onError?.(error);
+    }
   );
 
   return unsubscribe;
@@ -67,7 +71,11 @@ export function listenSchedulesByGnDivision(
     (snapshot) => {
       onData(snapshot.docs.map(mapScheduleDoc));
     },
-    (error) => onError?.(error)
+    (error) => {
+      console.warn("Schedules by GN division permission warning:", error.message);
+      onData([]);
+      onError?.(error);
+    }
   );
 
   return unsubscribe;

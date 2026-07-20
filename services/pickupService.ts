@@ -1,5 +1,6 @@
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
+import { findBestCollectorForPickup } from "./collectorDispatchService";
 import type { EcoUserProfile } from "../types/user";
 import type { PickupStatus, WasteCategory } from "../types/firestore";
 
@@ -58,6 +59,10 @@ export async function createPickupRequest(input: CreatePickupRequestInput) {
 
   const status: PickupStatus = "submitted";
 
+  // Find top matched collector in area using ranking algorithm
+  const locationObj = { address: input.address.trim() };
+  const bestMatch = await findBestCollectorForPickup(resident.area, locationObj);
+
   const pickupData = {
     residentId: resident.uid,
     residentName: resident.fullName,
@@ -66,16 +71,16 @@ export async function createPickupRequest(input: CreatePickupRequestInput) {
     collectorId: null,
     collectorName: null,
 
+    matchedCollectorId: bestMatch?.collector.uid ?? null,
+    matchedCollectorName: bestMatch?.collector.fullName ?? null,
+    matchScore: bestMatch?.matchScore ?? 0,
+    matchReason: bestMatch?.matchReason ?? "No active collector matched yet",
+
     wasteCategory,
     wasteDetails: input.wasteDetails.trim(),
 
-    // No Firebase Storage yet, so keep imageUrls empty.
     imageUrls: [],
-
-    location: {
-      address: input.address.trim(),
-    },
-
+    location: locationObj,
     area: resident.area ?? null,
 
     preferredDateText: input.preferredDateText?.trim() ?? "",

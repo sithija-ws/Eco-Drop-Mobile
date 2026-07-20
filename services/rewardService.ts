@@ -41,7 +41,11 @@ export function listenRewardItems(
       const items = snapshot.docs.map(mapRewardDoc);
       onData(items);
     },
-    (error) => onError?.(error)
+    (error) => {
+      console.warn("Reward items permission warning:", error.message);
+      onData([]);
+      onError?.(error);
+    }
   );
 
   return unsubscribe;

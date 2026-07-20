@@ -19,6 +19,13 @@ export type EcoUserProfile = {
   status: AccountStatus;
   area?: AreaInfo;
   photoURL?: string | null;
+  rating?: number;
+  reviewCount?: number;
+  completedPickupsCount?: number;
+  currentLocation?: {
+    latitude: number;
+    longitude: number;
+  };
   createdAt?: Timestamp | FieldValue;
   updatedAt?: Timestamp | FieldValue;
 };

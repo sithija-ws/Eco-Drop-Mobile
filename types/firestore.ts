@@ -34,6 +34,10 @@ export type PickupRequest = {
   residentPhone?: string;
   collectorId?: string | null;
   collectorName?: string | null;
+  matchedCollectorId?: string | null;
+  matchedCollectorName?: string | null;
+  matchScore?: number;
+  matchReason?: string;
   wasteCategory: WasteCategory;
   wasteDetails?: string;
   imageUrls?: string[];
