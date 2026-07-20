@@ -125,24 +125,14 @@ export default function AdminProfileScreen() {
             icon="trash-can-outline"
             title="Smart Bin Management"
             subtitle="Update bin fill levels, status, and locations"
-            onPress={() =>
-              Alert.alert(
-                "Coming soon",
-                "Smart bin management will be connected next."
-              )
-            }
+            onPress={() => router.push("/admin/bins")}
           />
 
           <ActionCard
             icon="file-chart-outline"
             title="Reports & Complaints"
             subtitle="Review resident issues and collection reports"
-            onPress={() =>
-              Alert.alert(
-                "Coming soon",
-                "Reports workflow will be connected next."
-              )
-            }
+            onPress={() => router.push("/admin/reports")}
           />
         </View>
 

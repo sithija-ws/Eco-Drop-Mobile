@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -8,11 +9,19 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
+import { router } from "expo-router";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useAuth } from "../../context/AuthContext";
+import {
+  listenAdminDashboard,
+  type AdminDashboardData,
+} from "../../services/adminService";
+import { getBinFillColor, formatBinType } from "../../services/binService";
+import { formatWasteCategory } from "../../services/dashboardService";
+import type { PickupRequest, SmartBin } from "../../types/firestore";
 import { colors, radius, softShadow, spacing } from "../../constants/theme";
 
 type MaterialIconName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
-type IonIconName = React.ComponentProps<typeof Ionicons>["name"];
 
 type QuickAction = {
   id: string;
@@ -20,120 +29,83 @@ type QuickAction = {
   icon: MaterialIconName;
   iconColor: string;
   iconBg: string;
+  route: string;
   primary?: boolean;
-};
-
-type BinHealth = {
-  id: string;
-  name: string;
-  percent: number;
-  status: string;
-  color: string;
-};
-
-type RequestItem = {
-  id: string;
-  title: string;
-  description: string;
-  badge: string;
-  time: string;
-  icon: MaterialIconName;
-  iconBg: string;
-  iconColor: string;
-  highPriority?: boolean;
 };
 
 const quickActions: QuickAction[] = [
   {
     id: "1",
-    title: "Reschedule Route",
-    icon: "routes",
+    title: "User Management",
+    icon: "account-group-outline",
     iconColor: "#355C7D",
     iconBg: "#EEF3FF",
+    route: "/admin/users",
   },
   {
     id: "2",
-    title: "Issue Alert",
-    icon: "bullhorn-outline",
+    title: "Reports & Issues",
+    icon: "alert-outline",
     iconColor: colors.danger,
     iconBg: "#FFF0F0",
+    route: "/admin/reports",
   },
   {
     id: "3",
-    title: "Download Report",
-    icon: "download-outline",
+    title: "Smart Bins",
+    icon: "trash-can-outline",
     iconColor: "#355C7D",
     iconBg: "#EEF3FF",
+    route: "/admin/bins",
   },
   {
     id: "4",
-    title: "New Task",
-    icon: "plus",
+    title: "Schedule Route",
+    icon: "calendar-month-outline",
     iconColor: "#FFFFFF",
     iconBg: "rgba(255,255,255,0.22)",
+    route: "/admin/schedule",
     primary: true,
   },
 ];
 
-const binHealth: BinHealth[] = [
-  {
-    id: "1",
-    name: "Bin ST-01 (Market)",
-    percent: 95,
-    status: "95% Full",
-    color: colors.danger,
-  },
-  {
-    id: "2",
-    name: "Bin RS-12 (Park Road)",
-    percent: 65,
-    status: "65% Full",
-    color: "#4D6258",
-  },
-  {
-    id: "3",
-    name: "Bin RS-15 (School)",
-    percent: 20,
-    status: "20% Full",
-    color: colors.primary,
-  },
-];
-
-const requests: RequestItem[] = [
-  {
-    id: "1",
-    title: "Missed Pickup - Lane 4",
-    description: "Resident reported bin not cleared...",
-    badge: "High Priority",
-    time: "2h ago",
-    icon: "alert-outline",
-    iconBg: "#E9F3FF",
-    iconColor: "#5A7FA8",
-    highPriority: true,
-  },
-  {
-    id: "2",
-    title: "Bulk E-Waste Pickup",
-    description: "Requested special transport for old...",
-    badge: "Review",
-    time: "5h ago",
-    icon: "recycle",
-    iconBg: "#EAF9F0",
-    iconColor: colors.primaryDark,
-  },
-  {
-    id: "3",
-    title: "Schedule Inquiry",
-    description: "Asking about holiday collection times.",
-    badge: "Info",
-    time: "1d ago",
-    icon: "help",
-    iconBg: "#E7F1FF",
-    iconColor: "#5A7FA8",
-  },
-];
-
 export default function AdminDashboardScreen() {
+  const { profile } = useAuth();
+  const [data, setData] = useState<AdminDashboardData>({
+    totalPickups: 0,
+    completedPickups: 0,
+    openRequests: 0,
+    activeCollectors: 0,
+    pendingCollectors: 0,
+    residentCount: 0,
+    overflowSmartBins: 0,
+    reportsCount: 0,
+    smartBinHealth: [],
+    requestsQueue: [],
+    reports: [],
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const unsubscribe = listenAdminDashboard(
+      (res) => {
+        setData(res);
+        setLoading(false);
+      },
+      (error) => {
+        console.warn("Admin dashboard listener error", error);
+        setLoading(false);
+      }
+    );
+
+    return unsubscribe;
+  }, []);
+
+  const areaTitle =
+    profile?.area?.gnDivision ??
+    profile?.area?.district ??
+    "Colombo North - 04";
+
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
       <ScrollView
@@ -142,7 +114,7 @@ export default function AdminDashboardScreen() {
       >
         <View style={styles.headerBlock}>
           <Text style={styles.eyebrow}>Area Admin Dashboard</Text>
-          <Text style={styles.areaTitle}>Colombo North - 04</Text>
+          <Text style={styles.areaTitle}>{areaTitle}</Text>
 
           <View style={styles.liveBadge}>
             <View style={styles.liveIconCircle}>
@@ -171,15 +143,15 @@ export default function AdminDashboardScreen() {
         <View style={styles.statsGrid}>
           <StatCard
             label="Total Pickups"
-            value="142"
-            helper="+12% vs yesterday"
+            value={String(data.totalPickups)}
+            helper={`${data.completedPickups} completed`}
             icon="truck-outline"
             iconColor={colors.primaryDeep}
           />
           <StatCard
             label="Active Teams"
-            value="08"
-            helper="2 routes pending"
+            value={String(data.activeCollectors)}
+            helper={`${data.pendingCollectors} pending approval`}
             icon="account-group-outline"
             iconColor="#355C7D"
           />
@@ -191,11 +163,22 @@ export default function AdminDashboardScreen() {
             <MaterialCommunityIcons
               name="alert-outline"
               size={26}
-              color={colors.danger}
+              color={data.overflowSmartBins > 0 ? colors.danger : colors.primaryDark}
             />
           </View>
-          <Text style={styles.overflowValue}>03</Text>
-          <Text style={styles.overflowHelper}>Require immediate action</Text>
+          <Text style={styles.overflowValue}>
+            {String(data.overflowSmartBins).padStart(2, "0")}
+          </Text>
+          <Text
+            style={[
+              styles.overflowHelper,
+              data.overflowSmartBins === 0 && { color: colors.primaryDark },
+            ]}
+          >
+            {data.overflowSmartBins > 0
+              ? "Bins require immediate action"
+              : "All smart bins operating normally"}
+          </Text>
         </View>
 
         <View style={styles.tractorCard}>
@@ -209,14 +192,20 @@ export default function AdminDashboardScreen() {
             </View>
 
             <View style={styles.tractorTextBlock}>
-              <Text style={styles.tractorTitle}>Tractor Alpha-1</Text>
-              <Text style={styles.tractorSubtitle}>Route: Sector B</Text>
-              <Text style={styles.tractorSubtitle}>(Residential)</Text>
+              <Text style={styles.tractorTitle}>Active Route Monitor</Text>
+              <Text style={styles.tractorSubtitle}>
+                {data.activeCollectors > 0
+                  ? `${data.activeCollectors} Collector(s) Active`
+                  : "No collectors currently on route"}
+              </Text>
+              <Text style={styles.tractorSubtitle}>
+                ({data.openRequests} open pickup requests)
+              </Text>
             </View>
 
             <View style={styles.etaBlock}>
-              <Text style={styles.etaLabel}>ETA Next Sector</Text>
-              <Text style={styles.etaValue}>14 mins</Text>
+              <Text style={styles.etaLabel}>Reports</Text>
+              <Text style={styles.etaValue}>{data.reportsCount}</Text>
             </View>
           </View>
 
@@ -226,34 +215,49 @@ export default function AdminDashboardScreen() {
         <View style={styles.healthCard}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Smart Bin Health</Text>
-            <Pressable hitSlop={8}>
+            <Pressable hitSlop={8} onPress={() => router.push("/admin/bins")}>
               <Text style={styles.sectionAction}>View All</Text>
             </Pressable>
           </View>
 
-          <View style={styles.binList}>
-            {binHealth.map((item) => (
-              <BinHealthRow key={item.id} item={item} />
-            ))}
-          </View>
+          {loading ? (
+            <ActivityIndicator color={colors.primaryDark} style={{ marginVertical: spacing.md }} />
+          ) : data.smartBinHealth.length > 0 ? (
+            <View style={styles.binList}>
+              {data.smartBinHealth.map((bin) => (
+                <BinHealthRow key={bin.id} item={bin} />
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.emptyText}>No smart bins added yet.</Text>
+          )}
         </View>
 
         <View style={styles.queueCard}>
           <View style={styles.queueHeaderRow}>
             <Text style={styles.sectionTitle}>Requests Queue</Text>
             <View style={styles.countBadge}>
-              <Text style={styles.countBadgeText}>4</Text>
+              <Text style={styles.countBadgeText}>{data.requestsQueue.length}</Text>
             </View>
           </View>
 
-          <View style={styles.requestList}>
-            {requests.map((item) => (
-              <RequestRow key={item.id} item={item} />
-            ))}
-          </View>
+          {loading ? (
+            <ActivityIndicator color={colors.primaryDark} style={{ marginVertical: spacing.md }} />
+          ) : data.requestsQueue.length > 0 ? (
+            <View style={styles.requestList}>
+              {data.requestsQueue.map((req) => (
+                <RequestRow key={req.id} item={req} />
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.emptyText}>No pending pickup requests in queue.</Text>
+          )}
 
-          <Pressable style={styles.viewAllButton}>
-            <Text style={styles.viewAllText}>View All Requests</Text>
+          <Pressable
+            style={styles.viewAllButton}
+            onPress={() => router.push("/admin/schedule")}
+          >
+            <Text style={styles.viewAllText}>View All Schedules & Routes</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -262,9 +266,16 @@ export default function AdminDashboardScreen() {
 }
 
 function QuickActionCard({ action }: { action: QuickAction }) {
+  const handlePress = () => {
+    router.push(action.route as any);
+  };
+
   if (action.primary) {
     return (
-      <Pressable style={({ pressed }) => [styles.quickCardPrimary, pressed && styles.pressed]}>
+      <Pressable
+        style={({ pressed }) => [styles.quickCardPrimary, pressed && styles.pressed]}
+        onPress={handlePress}
+      >
         <View style={[styles.quickIconCircle, { backgroundColor: action.iconBg }]}>
           <MaterialCommunityIcons name={action.icon} size={28} color={action.iconColor} />
         </View>
@@ -274,7 +285,10 @@ function QuickActionCard({ action }: { action: QuickAction }) {
   }
 
   return (
-    <Pressable style={({ pressed }) => [styles.quickCard, pressed && styles.pressed]}>
+    <Pressable
+      style={({ pressed }) => [styles.quickCard, pressed && styles.pressed]}
+      onPress={handlePress}
+    >
       <View style={[styles.quickIconCircle, { backgroundColor: action.iconBg }]}>
         <MaterialCommunityIcons name={action.icon} size={25} color={action.iconColor} />
       </View>
@@ -365,40 +379,53 @@ function MapPreview() {
   );
 }
 
-function BinHealthRow({ item }: { item: BinHealth }) {
-  const width = `${item.percent}%` as `${number}%`;
+function BinHealthRow({ item }: { item: SmartBin }) {
+  const fill = Math.max(0, Math.min(100, Math.round(Number(item.fillLevel ?? 0))));
+  const color = getBinFillColor(fill);
+  const width = `${fill}%` as `${number}%`;
 
   return (
     <View style={styles.binRow}>
       <View style={styles.binHeaderRow}>
-        <Text style={styles.binName}>{item.name}</Text>
-        <Text style={[styles.binStatus, { color: item.color }]}>{item.status}</Text>
+        <Text style={styles.binName}>
+          {item.name} ({formatBinType(item.type)})
+        </Text>
+        <Text style={[styles.binStatus, { color }]}>{fill}% Full</Text>
       </View>
       <View style={styles.binTrack}>
-        <View style={[styles.binFill, { width, backgroundColor: item.color }]} />
+        <View style={[styles.binFill, { width, backgroundColor: color }]} />
       </View>
     </View>
   );
 }
 
-function RequestRow({ item }: { item: RequestItem }) {
+function RequestRow({ item }: { item: PickupRequest }) {
+  const categoryLabel = formatWasteCategory(item.wasteCategory);
+  const isWaiting = item.status === "waiting_for_collector";
+
   return (
     <Pressable style={({ pressed }) => [styles.requestRow, pressed && styles.pressed]}>
-      <View style={[styles.requestIconWrap, { backgroundColor: item.iconBg }]}>
-        <MaterialCommunityIcons name={item.icon} size={20} color={item.iconColor} />
+      <View style={[styles.requestIconWrap, { backgroundColor: isWaiting ? "#FFF0F0" : "#EAF9F0" }]}>
+        <MaterialCommunityIcons
+          name={isWaiting ? "clock-outline" : "recycle"}
+          size={20}
+          color={isWaiting ? colors.danger : colors.primaryDark}
+        />
       </View>
 
       <View style={styles.requestContent}>
-        <Text style={styles.requestTitle}>{item.title}</Text>
-        <Text style={styles.requestDescription}>{item.description}</Text>
+        <Text style={styles.requestTitle}>{categoryLabel}</Text>
+        <Text style={styles.requestDescription} numberOfLines={1}>
+          {item.wasteDetails || item.location?.address || "Pickup request"}
+        </Text>
         <View style={styles.requestMetaRow}>
-          <View style={[styles.requestBadge, item.highPriority && styles.highPriorityBadge]}>
-            <Text style={[styles.requestBadgeText, item.highPriority && styles.highPriorityText]}>
-              {item.badge}
+          <View style={[styles.requestBadge, isWaiting && styles.highPriorityBadge]}>
+            <Text style={[styles.requestBadgeText, isWaiting && styles.highPriorityText]}>
+              {item.status.replace(/_/g, " ")}
             </Text>
           </View>
           <View style={styles.timeBadge}>
-            <Text style={styles.timeBadgeText}>{item.time}</Text>
+            <Text style={styles.timeBadgeText}>{item.residentName || "Resident"}</Text>
           </View>
         </View>
       </View>
@@ -631,13 +658,13 @@ const styles = StyleSheet.create({
   },
   tractorTitle: {
     color: colors.text,
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "900",
   },
   tractorSubtitle: {
     color: "#172B4D",
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
     fontWeight: "700",
   },
   etaBlock: {
@@ -659,7 +686,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   mapPreview: {
-    height: 266,
+    height: 220,
     overflow: "hidden",
     backgroundColor: "#073331",
   },
@@ -939,5 +966,11 @@ const styles = StyleSheet.create({
     color: "#172B4D",
     fontSize: 15,
     fontWeight: "800",
+  },
+  emptyText: {
+    color: colors.textSoft,
+    fontSize: 13,
+    fontWeight: "700",
+    marginVertical: spacing.sm,
   },
 });

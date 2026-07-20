@@ -62,3 +62,26 @@ export type SmartBin = {
   updatedAt?: FirestoreDate;
   status?: "active" | "maintenance" | "offline";
 };
+
+export type ReportCategory =
+  | "missed_pickup"
+  | "overflowing_bin"
+  | "illegal_dumping"
+  | "other";
+
+export type ReportStatus = "open" | "in_progress" | "resolved";
+
+export type WasteReport = {
+  id: string;
+  reporterId: string;
+  reporterName?: string;
+  reporterRole?: string;
+  title: string;
+  description: string;
+  category: ReportCategory;
+  status: ReportStatus;
+  location?: PickupLocation;
+  area?: AreaInfo;
+  createdAt?: FirestoreDate;
+  updatedAt?: FirestoreDate;
+};
