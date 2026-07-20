@@ -340,6 +340,16 @@ function ActivePickupCard({ pickup }: { pickup: PickupRequest }) {
               Collector: {pickup.collectorName}
             </Text>
           ) : null}
+
+          {["accepted", "collector_on_the_way", "collected"].includes(pickup.status) ? (
+            <Pressable
+              style={styles.trackLiveBtn}
+              onPress={() => router.push("/(resident)/(tabs)/schedule" as never)}
+            >
+              <MaterialCommunityIcons name="bus-marker" size={15} color="#FFFFFF" />
+              <Text style={styles.trackLiveBtnText}>Track Live Tractor</Text>
+            </Pressable>
+          ) : null}
         </View>
 
         <View style={styles.statusBlock}>
@@ -1025,6 +1035,23 @@ const styles = StyleSheet.create({
   emptySmallTitle: {
     color: colors.text,
     fontSize: 14,
+    fontWeight: "900",
+  },
+  trackLiveBtn: {
+    marginTop: spacing.sm,
+    height: 34,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primaryDark,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    alignSelf: "flex-start",
+  },
+  trackLiveBtnText: {
+    color: "#FFFFFF",
+    fontSize: 11,
     fontWeight: "900",
   },
   emptySmallSubtitle: {
