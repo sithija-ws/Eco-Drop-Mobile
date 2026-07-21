@@ -25,6 +25,7 @@ import {
 } from "../../services/binService";
 import type { SmartBin } from "../../types/firestore";
 import { colors, radius, softShadow, spacing } from "../../constants/theme";
+import MapViewComponent, { MapMarkerItem } from "../../components/common/MapViewComponent";
 
 type MaterialIconName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
 
@@ -85,6 +86,24 @@ export default function AdminBinsScreen() {
     }
   };
 
+  const binMarkers = useMemo<MapMarkerItem[]>(() => {
+    return bins.map((bin) => {
+      const lat = bin.location?.latitude || 6.9271 + (Math.random() - 0.5) * 0.04;
+      const lng = bin.location?.longitude || 79.8612 + (Math.random() - 0.5) * 0.04;
+      const fill = Number(bin.fillLevel ?? 0);
+      const pinColor = fill >= 85 ? "#E53935" : fill >= 50 ? "#FB8C00" : "#4CAF50";
+
+      return {
+        id: bin.id,
+        latitude: lat,
+        longitude: lng,
+        title: bin.name,
+        description: `Fill: ${fill}% • Type: ${bin.type}`,
+        pinColor,
+      };
+    });
+  }, [bins]);
+
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
@@ -102,6 +121,24 @@ export default function AdminBinsScreen() {
           <StatCard icon="trash-can-outline" label="Total" value={String(stats.total)} />
           <StatCard icon="alert-outline" label="Full" value={String(stats.full)} warning={stats.full > 0} />
           <StatCard icon="tools" label="Issues" value={String(stats.maintenance)} warning={stats.maintenance > 0} />
+        </View>
+
+        {/* Live Municipal Smart Bin Fleet Map */}
+        <View style={styles.mapCard}>
+          <View style={styles.mapHeaderRow}>
+            <MaterialCommunityIcons name="map-marker-multiple-outline" size={20} color={colors.primaryDark} />
+            <Text style={styles.mapHeaderTitle}>Live Bin Fleet Map</Text>
+          </View>
+          <MapViewComponent
+            height={200}
+            initialRegion={{
+              latitude: 6.9271,
+              longitude: 79.8612,
+              latitudeDelta: 0.06,
+              longitudeDelta: 0.06,
+            }}
+            markers={binMarkers}
+          />
         </View>
 
         {loading ? (
@@ -362,6 +399,24 @@ const styles = StyleSheet.create({
   headerSubtitle: { marginTop: 3, color: colors.textSoft, fontSize: 13, fontWeight: "700" },
   addButton: { width: 48, height: 48, borderRadius: radius.pill, backgroundColor: colors.primaryDark, alignItems: "center", justifyContent: "center", ...softShadow },
   statsGrid: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.lg },
+  mapCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+    ...softShadow,
+  },
+  mapHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: spacing.xs,
+  },
+  mapHeaderTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: colors.text,
+    marginLeft: 6,
+  },
   statCard: { flex: 1, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.surface, alignItems: "center", ...softShadow },
   statValue: { marginTop: 4, color: colors.text, fontSize: 22, fontWeight: "900" },
   statLabel: { color: colors.textSoft, fontSize: 10, fontWeight: "800" },

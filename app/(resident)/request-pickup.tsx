@@ -23,6 +23,9 @@ import {
 } from "../../services/pickupService";
 import type { WasteCategory } from "../../types/firestore";
 import { colors, radius, softShadow, spacing } from "../../constants/theme";
+import LocationInput, {
+  SelectedLocation,
+} from "../../components/resident/LocationInput";
 
 type MaterialIconName = React.ComponentProps<
   typeof MaterialCommunityIcons
@@ -81,7 +84,11 @@ export default function RequestPickupScreen() {
     useState<WasteCategory | null>(null);
 
   const [wasteDetails, setWasteDetails] = useState("");
-  const [address, setAddress] = useState("");
+  const [locationState, setLocationState] = useState<SelectedLocation>({
+    address: "",
+    latitude: 6.9271,
+    longitude: 79.8612,
+  });
   const [preferredDateText, setPreferredDateText] = useState("");
   const [notes, setNotes] = useState("");
   const [imageUris, setImageUris] = useState<string[]>([]);
@@ -193,8 +200,8 @@ export default function RequestPickupScreen() {
       return;
     }
 
-    if (!address.trim()) {
-      Alert.alert("Address required", "Please enter the pickup address.");
+    if (!locationState.address.trim()) {
+      Alert.alert("Address required", "Please enter or pin the pickup address.");
       return;
     }
 
@@ -205,7 +212,9 @@ export default function RequestPickupScreen() {
         resident: profile,
         wasteCategory: selectedCategory,
         wasteDetails,
-        address,
+        address: locationState.address,
+        latitude: locationState.latitude,
+        longitude: locationState.longitude,
         preferredDateText,
         notes,
         imageUris,
@@ -322,13 +331,16 @@ export default function RequestPickupScreen() {
               multiline
             />
 
-            <LabeledInput
-              label="Pickup Address"
-              placeholder="Enter house number, street, landmark"
-              value={address}
-              onChangeText={setAddress}
-              multiline
-            />
+            <View style={{ marginBottom: spacing.sm }}>
+              <Text style={{ fontSize: 14, fontWeight: "600", color: colors.text, marginBottom: 4 }}>
+                Pickup Location & Address
+              </Text>
+              <LocationInput
+                value={locationState.address}
+                onLocationChange={(newLoc) => setLocationState(newLoc)}
+                placeholder="Enter address or pin on map..."
+              />
+            </View>
 
             <LabeledInput
               label="Preferred Date / Time"

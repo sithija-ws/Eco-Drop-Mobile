@@ -9,6 +9,8 @@ export type CreatePickupRequestInput = {
   wasteCategory: WasteCategory;
   wasteDetails: string;
   address: string;
+  latitude?: number;
+  longitude?: number;
   preferredDateText?: string;
   notes?: string;
 
@@ -60,7 +62,11 @@ export async function createPickupRequest(input: CreatePickupRequestInput) {
   const status: PickupStatus = "submitted";
 
   // Find top matched collector in area using ranking algorithm
-  const locationObj = { address: input.address.trim() };
+  const locationObj = {
+    address: input.address.trim(),
+    latitude: input.latitude ?? 6.9271,
+    longitude: input.longitude ?? 79.8612,
+  };
   const bestMatch = await findBestCollectorForPickup(resident.area, locationObj);
 
   const pickupData = {

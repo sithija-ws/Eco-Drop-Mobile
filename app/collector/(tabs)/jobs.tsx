@@ -29,6 +29,9 @@ import {
 } from "../../../services/dashboardService";
 import type { PickupRequest, PickupStatus, SmartBin } from "../../../types/firestore";
 import { colors, radius, softShadow, spacing } from "../../../constants/theme";
+import * as Location from "expo-location";
+import MapViewComponent, { MapMarkerItem } from "../../../components/common/MapViewComponent";
+import { updateCollectorGpsLocation } from "../../../services/collectorMapService";
 
 type MaterialIconName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
 type FilterType = "incoming" | "active" | "bins" | "completed" | "all";
@@ -54,6 +57,93 @@ export default function CollectorJobsScreen() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [selectedJob, setSelectedJob] = useState<PickupRequest | null>(null);
   const [emptyingBinId, setEmptyingBinId] = useState<string | null>(null);
+  const [isGpsBroadcasting, setIsGpsBroadcasting] = useState(false);
+  const [collectorCoords, setCollectorCoords] = useState<{ latitude: number; longitude: number }>({
+    latitude: 6.9271,
+    longitude: 79.8612,
+  });
+
+  // Toggle GPS broadcasting for Live Location tracking
+  const toggleGpsBroadcasting = async () => {
+    if (!isGpsBroadcasting) {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission Needed", "Location permission is required for live GPS tracking.");
+        return;
+      }
+      setIsGpsBroadcasting(true);
+      Alert.alert("GPS Live Tracking Active", "Residents can now track your vehicle en route.");
+    } else {
+      setIsGpsBroadcasting(false);
+    }
+  };
+
+  // Broadcast location periodically when enabled
+  useEffect(() => {
+    if (!isGpsBroadcasting || !profile?.uid) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        setCollectorCoords({
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+        });
+        await updateCollectorGpsLocation(
+          profile.uid,
+          loc.coords.latitude,
+          loc.coords.longitude,
+          loc.coords.heading ?? 0
+        );
+      } catch (e) {
+        console.warn("GPS broadcast failed", e);
+      }
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [isGpsBroadcasting, profile?.uid]);
+
+  // Compute map markers for pickup points & smart bins
+  const mapMarkers = useMemo<MapMarkerItem[]>(() => {
+    const markers: MapMarkerItem[] = [
+      {
+        id: "collector-me",
+        latitude: collectorCoords.latitude,
+        longitude: collectorCoords.longitude,
+        title: profile?.fullName || "My Vehicle",
+        description: isGpsBroadcasting ? "Broadcasting Live GPS" : "Collector Vehicle",
+        pinColor: colors.primaryDark,
+      },
+    ];
+
+    [...incomingRequests, ...assignedJobs].forEach((job) => {
+      if (job.location?.latitude && job.location?.longitude) {
+        markers.push({
+          id: job.id,
+          latitude: job.location.latitude,
+          longitude: job.location.longitude,
+          title: `${job.wasteCategory.toUpperCase()} Pickup`,
+          description: job.location.address || job.residentName,
+          pinColor: colors.primary,
+        });
+      }
+    });
+
+    smartBins.forEach((bin) => {
+      if (bin.location?.latitude && bin.location?.longitude) {
+        markers.push({
+          id: `bin-${bin.id}`,
+          latitude: bin.location.latitude,
+          longitude: bin.location.longitude,
+          title: `Smart Bin: ${bin.name}`,
+          description: `Fill Level: ${bin.fillLevel}%`,
+          pinColor: bin.fillLevel > 80 ? "#E53935" : bin.fillLevel > 50 ? "#FB8C00" : "#4CAF50",
+        });
+      }
+    });
+
+    return markers;
+  }, [collectorCoords, incomingRequests, assignedJobs, smartBins, profile?.fullName, isGpsBroadcasting]);
 
   useEffect(() => {
     if (!profile) return;
@@ -206,6 +296,40 @@ export default function CollectorJobsScreen() {
           <StatCard icon="progress-clock" label="Active" value={String(stats.active)} />
           <StatCard icon="trash-can-outline" label="Bin Alerts" value={String(stats.bins)} />
           <StatCard icon="check-circle-outline" label="Done" value={String(stats.completed)} />
+        </View>
+
+        {/* Live GPS Broadcast Toggle & Interactive Route Map */}
+        <View style={styles.mapSectionCard}>
+          <View style={styles.mapSectionHeader}>
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <MaterialCommunityIcons name="crosshairs-gps" size={20} color={colors.primary} />
+              <Text style={styles.mapSectionTitle}>Route Map & Live GPS</Text>
+            </View>
+            <Pressable
+              style={[styles.gpsToggleBtn, isGpsBroadcasting && styles.gpsToggleBtnActive]}
+              onPress={toggleGpsBroadcasting}
+            >
+              <Ionicons
+                name={isGpsBroadcasting ? "radio" : "radio-outline"}
+                size={16}
+                color={isGpsBroadcasting ? "#FFF" : colors.primary}
+              />
+              <Text style={[styles.gpsToggleText, isGpsBroadcasting && styles.gpsToggleTextActive]}>
+                {isGpsBroadcasting ? "Broadcasting Live" : "Turn ON Live GPS"}
+              </Text>
+            </Pressable>
+          </View>
+
+          <MapViewComponent
+            height={200}
+            initialRegion={{
+              latitude: collectorCoords.latitude,
+              longitude: collectorCoords.longitude,
+              latitudeDelta: 0.05,
+              longitudeDelta: 0.05,
+            }}
+            markers={mapMarkers}
+          />
         </View>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
@@ -614,6 +738,47 @@ const styles = StyleSheet.create({
   modalMetaLabel: { fontSize: 10, fontWeight: "800", color: colors.textSoft },
   modalMetaValue: { fontSize: 14, fontWeight: "900", color: colors.text, marginTop: 4 },
   modalActions: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.md },
+
+  // Route Map & Live GPS Styles
+  mapSectionCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    ...softShadow,
+  },
+  mapSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing.sm,
+  },
+  mapSectionTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: colors.text,
+    marginLeft: 6,
+  },
+  gpsToggleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.surfaceSoft,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    gap: 4,
+  },
+  gpsToggleBtnActive: {
+    backgroundColor: colors.primaryDark,
+  },
+  gpsToggleText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.primary,
+  },
+  gpsToggleTextActive: {
+    color: "#FFF",
+  },
   modalActionSecondary: { flex: 1, height: 48, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
   modalActionSecondaryText: { fontSize: 13, fontWeight: "900", color: colors.primaryDark },
   modalActionPrimary: { flex: 2, height: 48, borderRadius: radius.md, backgroundColor: colors.primaryDark, alignItems: "center", justifyContent: "center" },
