@@ -19,6 +19,10 @@ import {
   subscribeCollectorLocation,
   estimateArrivalMinutes,
   generateInterpolatedPolyline,
+  calculateDistanceKm,
+  calculateBearing,
+  formatDistanceDisplay,
+  isCollectorNearDestination,
 } from "../../services/collectorMapService";
 import type { PickupRequest } from "../../types/firestore";
 
@@ -31,9 +35,11 @@ export default function TrackPickupScreen() {
   const [driverCoords, setDriverCoords] = useState<{
     latitude: number;
     longitude: number;
+    heading?: number;
   }>({
     latitude: 6.9200,
     longitude: 79.8550,
+    heading: 0,
   });
 
   // Listen to Pickup Request updates in Firestore
@@ -65,9 +71,18 @@ export default function TrackPickupScreen() {
       pickup.collectorId,
       (location) => {
         if (location) {
-          setDriverCoords({
-            latitude: location.latitude,
-            longitude: location.longitude,
+          setDriverCoords((prev) => {
+            const calculatedHeading = calculateBearing(
+              prev.latitude,
+              prev.longitude,
+              location.latitude,
+              location.longitude
+            );
+            return {
+              latitude: location.latitude,
+              longitude: location.longitude,
+              heading: location.heading ?? calculatedHeading,
+            };
           });
         }
       }
@@ -102,12 +117,29 @@ export default function TrackPickupScreen() {
   const pickupLat = pickup.location?.latitude || 6.9271;
   const pickupLng = pickup.location?.longitude || 79.8612;
 
+  const distanceKm = calculateDistanceKm(
+    driverCoords.latitude,
+    driverCoords.longitude,
+    pickupLat,
+    pickupLng
+  );
+
   const etaMinutes = estimateArrivalMinutes(
     driverCoords.latitude,
     driverCoords.longitude,
     pickupLat,
     pickupLng
   );
+
+  const isArrivingSoon =
+    pickup.status === "collector_on_the_way" &&
+    isCollectorNearDestination(
+      driverCoords.latitude,
+      driverCoords.longitude,
+      pickupLat,
+      pickupLng,
+      300
+    );
 
   const polylinePoints = generateInterpolatedPolyline(
     driverCoords,
@@ -153,6 +185,19 @@ export default function TrackPickupScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* Proximity Alert Banner */}
+        {isArrivingSoon && (
+          <View style={styles.arrivingAlertBanner}>
+            <MaterialCommunityIcons name="truck-delivery" size={24} color="#FFF" />
+            <View style={{ flex: 1, marginLeft: spacing.xs }}>
+              <Text style={styles.arrivingAlertTitle}>Driver is Arriving!</Text>
+              <Text style={styles.arrivingAlertSubtitle}>
+                Your Eco-Drop collector is under 300 meters away ({formatDistanceDisplay(distanceKm)}).
+              </Text>
+            </View>
+          </View>
+        )}
+
         {/* Live Map View */}
         <View style={styles.mapCard}>
           <MapViewComponent
@@ -177,8 +222,9 @@ export default function TrackPickupScreen() {
                 latitude: driverCoords.latitude,
                 longitude: driverCoords.longitude,
                 title: pickup.collectorName || "Eco-Collector",
-                description: "On duty vehicle",
+                description: `Distance: ${formatDistanceDisplay(distanceKm)}`,
                 pinColor: colors.primaryDark,
+                heading: driverCoords.heading,
               },
             ]}
             polyline={polylinePoints}
@@ -193,7 +239,7 @@ export default function TrackPickupScreen() {
               <Text style={styles.etaValue}>
                 {pickup.status === "completed"
                   ? "Completed"
-                  : `~ ${etaMinutes} mins`}
+                  : `~ ${etaMinutes} mins (${formatDistanceDisplay(distanceKm)})`}
               </Text>
             </View>
             <View style={styles.statusBadge}>
@@ -479,5 +525,24 @@ const styles = StyleSheet.create({
     color: colors.text,
     flexShrink: 1,
     textAlign: "right",
+  },
+  arrivingAlertBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#2E7D32",
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    ...softShadow,
+  },
+  arrivingAlertTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#FFF",
+  },
+  arrivingAlertSubtitle: {
+    fontSize: 12,
+    color: "#E8F5E9",
+    marginTop: 2,
   },
 });

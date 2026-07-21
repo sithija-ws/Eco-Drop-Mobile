@@ -31,7 +31,14 @@ import type { PickupRequest, PickupStatus, SmartBin } from "../../../types/fires
 import { colors, radius, softShadow, spacing } from "../../../constants/theme";
 import * as Location from "expo-location";
 import MapViewComponent, { MapMarkerItem } from "../../../components/common/MapViewComponent";
-import { updateCollectorGpsLocation } from "../../../services/collectorMapService";
+import {
+  updateCollectorGpsLocation,
+  openExternalNavigation,
+  calculateDistanceKm,
+  formatDistanceDisplay,
+  generateInterpolatedPolyline,
+  calculateBearing,
+} from "../../../services/collectorMapService";
 
 type MaterialIconName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
 type FilterType = "incoming" | "active" | "bins" | "completed" | "all";
@@ -58,9 +65,16 @@ export default function CollectorJobsScreen() {
   const [selectedJob, setSelectedJob] = useState<PickupRequest | null>(null);
   const [emptyingBinId, setEmptyingBinId] = useState<string | null>(null);
   const [isGpsBroadcasting, setIsGpsBroadcasting] = useState(false);
-  const [collectorCoords, setCollectorCoords] = useState<{ latitude: number; longitude: number }>({
+  const [isSimulatingDrive, setIsSimulatingDrive] = useState(false);
+  const [simulationIndex, setSimulationIndex] = useState(0);
+  const [collectorCoords, setCollectorCoords] = useState<{
+    latitude: number;
+    longitude: number;
+    heading?: number;
+  }>({
     latitude: 6.9271,
     longitude: 79.8612,
+    heading: 0,
   });
 
   // Toggle GPS broadcasting for Live Location tracking
@@ -75,12 +89,13 @@ export default function CollectorJobsScreen() {
       Alert.alert("GPS Live Tracking Active", "Residents can now track your vehicle en route.");
     } else {
       setIsGpsBroadcasting(false);
+      setIsSimulatingDrive(false);
     }
   };
 
   // Broadcast location periodically when enabled
   useEffect(() => {
-    if (!isGpsBroadcasting || !profile?.uid) return;
+    if (!isGpsBroadcasting || !profile?.uid || isSimulatingDrive) return;
 
     const interval = setInterval(async () => {
       try {
@@ -88,6 +103,7 @@ export default function CollectorJobsScreen() {
         setCollectorCoords({
           latitude: loc.coords.latitude,
           longitude: loc.coords.longitude,
+          heading: loc.coords.heading ?? 0,
         });
         await updateCollectorGpsLocation(
           profile.uid,
@@ -101,7 +117,57 @@ export default function CollectorJobsScreen() {
     }, 10000);
 
     return () => clearInterval(interval);
-  }, [isGpsBroadcasting, profile?.uid]);
+  }, [isGpsBroadcasting, profile?.uid, isSimulatingDrive]);
+
+  // Handle simulated driver movement when testing
+  useEffect(() => {
+    if (
+      !isSimulatingDrive ||
+      !selectedJob?.location?.latitude ||
+      !selectedJob?.location?.longitude ||
+      !profile?.uid
+    )
+      return;
+
+    const target = {
+      latitude: selectedJob.location.latitude,
+      longitude: selectedJob.location.longitude,
+    };
+
+    const path = generateInterpolatedPolyline(collectorCoords, target, 10);
+
+    const timer = setInterval(() => {
+      setSimulationIndex((prev) => {
+        const nextIdx = (prev + 1) % path.length;
+        const currentPt = path[nextIdx];
+        const nextPt = path[(nextIdx + 1) % path.length];
+        const bearing = calculateBearing(
+          currentPt.latitude,
+          currentPt.longitude,
+          nextPt.latitude,
+          nextPt.longitude
+        );
+
+        setCollectorCoords({
+          latitude: currentPt.latitude,
+          longitude: currentPt.longitude,
+          heading: bearing,
+        });
+
+        updateCollectorGpsLocation(
+          profile.uid,
+          currentPt.latitude,
+          currentPt.longitude,
+          bearing
+        );
+
+        return nextIdx;
+      });
+    }, 3000);
+
+    return () => clearInterval(timer);
+  }, [isSimulatingDrive, selectedJob, profile?.uid]);
+
 
   // Compute map markers for pickup points & smart bins
   const mapMarkers = useMemo<MapMarkerItem[]>(() => {
@@ -264,7 +330,14 @@ export default function CollectorJobsScreen() {
     });
   };
 
-  const openNavigation = (address?: string) => {
+  const openNavigation = (
+    address?: string,
+    coords?: { latitude?: number; longitude?: number }
+  ) => {
+    if (coords?.latitude && coords?.longitude) {
+      openExternalNavigation(coords.latitude, coords.longitude, address || "Pickup Location");
+      return;
+    }
     if (!address) return;
     const query = encodeURIComponent(address);
     Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${query}`).catch(() => {
@@ -388,7 +461,7 @@ export default function CollectorJobsScreen() {
                   onNextStatus={() => handleNextStatus(job)}
                   onPressDetails={() => setSelectedJob(job)}
                   onCall={() => openPhoneCall(job.residentPhone)}
-                  onNavigate={() => openNavigation(job.location?.address ?? job.area?.gnDivision)}
+                  onNavigate={() => openNavigation(job.location?.address ?? job.area?.gnDivision, job.location)}
                 />
               );
             })}
@@ -440,6 +513,27 @@ export default function CollectorJobsScreen() {
                   </View>
                 ) : null}
 
+                {/* Simulation Drive Option */}
+                <View style={styles.modalSection}>
+                  <Text style={styles.modalSectionLabel}>Driver Location & Simulation</Text>
+                  <Pressable
+                    style={[styles.simulationBtn, isSimulatingDrive && styles.simulationBtnActive]}
+                    onPress={() => {
+                      if (!isGpsBroadcasting) setIsGpsBroadcasting(true);
+                      setIsSimulatingDrive(!isSimulatingDrive);
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name={isSimulatingDrive ? "motion-pause-outline" : "motion-play-outline"}
+                      size={20}
+                      color={isSimulatingDrive ? "#FFF" : colors.primaryDark}
+                    />
+                    <Text style={[styles.simulationBtnText, isSimulatingDrive && styles.simulationBtnTextActive]}>
+                      {isSimulatingDrive ? "Stop GPS Drive Simulation" : "Simulate Drive to Pickup Spot"}
+                    </Text>
+                  </Pressable>
+                </View>
+
                 <View style={styles.modalMetaGrid}>
                   <View style={styles.modalMetaItem}>
                     <Text style={styles.modalMetaLabel}>Price</Text>
@@ -467,10 +561,10 @@ export default function CollectorJobsScreen() {
 
                 <Pressable
                   style={styles.modalActionSecondary}
-                  onPress={() => openNavigation(selectedJob.location?.address)}
+                  onPress={() => openNavigation(selectedJob.location?.address, selectedJob.location)}
                 >
                   <Ionicons name="navigate" size={18} color={colors.primaryDark} />
-                  <Text style={styles.modalActionSecondaryText}>Map</Text>
+                  <Text style={styles.modalActionSecondaryText}>GPS Nav</Text>
                 </Pressable>
 
                 {getNextStatus(selectedJob.status) ? (
@@ -783,4 +877,26 @@ const styles = StyleSheet.create({
   modalActionSecondaryText: { fontSize: 13, fontWeight: "900", color: colors.primaryDark },
   modalActionPrimary: { flex: 2, height: 48, borderRadius: radius.md, backgroundColor: colors.primaryDark, alignItems: "center", justifyContent: "center" },
   modalActionPrimaryText: { fontSize: 13, fontWeight: "900", color: "#FFFFFF" },
+  simulationBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surfaceSoft,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+  },
+  simulationBtnActive: {
+    backgroundColor: colors.primaryDark,
+  },
+  simulationBtnText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: colors.primaryDark,
+  },
+  simulationBtnTextActive: {
+    color: "#FFF",
+  },
 });
+

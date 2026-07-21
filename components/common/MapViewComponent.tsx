@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   StyleSheet,
   View,
@@ -30,6 +30,7 @@ export interface MapMarkerItem {
   title?: string;
   description?: string;
   pinColor?: string;
+  heading?: number;
   icon?: string;
   badge?: string;
 }
@@ -48,6 +49,8 @@ interface MapViewComponentProps {
   };
   markers?: MapMarkerItem[];
   polyline?: LatLng[];
+  polylineColor?: string;
+  autoFit?: boolean;
   interactive?: boolean;
   onPressMap?: (coordinate: LatLng) => void;
   onSelectMarker?: (marker: MapMarkerItem) => void;
@@ -67,6 +70,8 @@ export default function MapViewComponent({
   initialRegion = DEFAULT_REGION,
   markers = [],
   polyline,
+  polylineColor = colors.primary,
+  autoFit = true,
   interactive = true,
   onPressMap,
   onSelectMarker,
@@ -74,10 +79,28 @@ export default function MapViewComponent({
   showUserLocation = true,
   style,
 }: MapViewComponentProps) {
+  const mapRef = useRef<any>(null);
   const [currentRegion, setCurrentRegion] = useState(initialRegion);
 
   const isNativeMapSupported =
     Platform.OS !== "web" && NativeMapView !== null;
+
+  // Auto-fit bounds when markers or polyline change
+  useEffect(() => {
+    if (!isNativeMapSupported || !autoFit || !mapRef.current) return;
+
+    const allCoords: LatLng[] = [
+      ...markers.map((m) => ({ latitude: m.latitude, longitude: m.longitude })),
+      ...(polyline || []),
+    ];
+
+    if (allCoords.length >= 2 && mapRef.current.fitToCoordinates) {
+      mapRef.current.fitToCoordinates(allCoords, {
+        edgePadding: { top: 40, right: 40, bottom: 40, left: 40 },
+        animated: true,
+      });
+    }
+  }, [markers, polyline, autoFit, isNativeMapSupported]);
 
   const handleMapPress = (e: any) => {
     if (onPressMap && e.nativeEvent && e.nativeEvent.coordinate) {
@@ -97,8 +120,8 @@ export default function MapViewComponent({
       >
         <View style={styles.gridOverlay}>
           <MaterialCommunityIcons
-            name="map-marker-radius-outline"
-            size={44}
+            name="navigation-variant-outline"
+            size={40}
             color={colors.primary}
           />
           <Text style={styles.fallbackTitle}>Eco-Drop Live Map</Text>
@@ -106,6 +129,7 @@ export default function MapViewComponent({
             Lat: {currentRegion.latitude.toFixed(4)}, Lng:{" "}
             {currentRegion.longitude.toFixed(4)}
           </Text>
+          
           {markers.length > 0 && (
             <View style={styles.markerBadgeContainer}>
               <Ionicons name="location" size={14} color={colors.primaryDark} />
@@ -114,7 +138,15 @@ export default function MapViewComponent({
               </Text>
             </View>
           )}
+
+          {polyline && polyline.length > 1 && (
+            <View style={styles.routeBadgeContainer}>
+              <MaterialCommunityIcons name="routes" size={14} color={colors.primary} />
+              <Text style={styles.routeBadgeText}>Live Navigation Route Active</Text>
+            </View>
+          )}
         </View>
+
         {interactive && (
           <TouchableOpacity
             style={styles.fallbackTapArea}
@@ -136,6 +168,7 @@ export default function MapViewComponent({
   return (
     <View style={[styles.container, { height: height as any }, style]}>
       <NativeMapView
+        ref={mapRef}
         style={StyleSheet.absoluteFillObject}
         initialRegion={initialRegion}
         scrollEnabled={interactive}
@@ -154,6 +187,7 @@ export default function MapViewComponent({
             title={m.title}
             description={m.description}
             pinColor={m.pinColor || colors.primary}
+            rotation={m.heading || 0}
             onPress={() => onSelectMarker && onSelectMarker(m)}
           />
         ))}
@@ -161,7 +195,7 @@ export default function MapViewComponent({
         {polyline && polyline.length > 1 && (
           <NativePolyline
             coordinates={polyline}
-            strokeColor={colors.primary}
+            strokeColor={polylineColor}
             strokeWidth={4}
           />
         )}
@@ -220,6 +254,21 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginLeft: 4,
   },
+  routeBadgeContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.primary + "1A",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+    marginTop: spacing.xs,
+  },
+  routeBadgeText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: colors.primaryDark || "#1B5E20",
+    marginLeft: 4,
+  },
   fallbackTapArea: {
     marginTop: spacing.md,
     backgroundColor: colors.primary,
@@ -233,3 +282,4 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 });
+
