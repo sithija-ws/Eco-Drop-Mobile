@@ -44,6 +44,10 @@ service cloud.firestore {
             && request.resource.data.role == resource.data.role
             && request.resource.data.uid == resource.data.uid
           )
+          || (
+            resource.data.role == "collector"
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["rating", "reviewCount", "updatedAt"])
+          )
           || isAdmin()
         );
 

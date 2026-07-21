@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Image,
@@ -19,8 +19,14 @@ import { useAuth } from "../../context/AuthContext";
 import {
   calculateEcoDropsForCategory,
   calculateEstimatedPickupPrice,
+  calculateRecyclingPayout,
   createPickupRequest,
+  RECYCLABLE_PAYOUT_RATES,
 } from "../../services/pickupService";
+import {
+  listAvailableCollectors,
+  CollectorMatchResult,
+} from "../../services/collectorDispatchService";
 import type { WasteCategory } from "../../types/firestore";
 import { colors, radius, softShadow, spacing } from "../../constants/theme";
 import LocationInput, {
@@ -83,6 +89,7 @@ export default function RequestPickupScreen() {
   const [selectedCategory, setSelectedCategory] =
     useState<WasteCategory | null>(null);
 
+  const [quantityKgText, setQuantityKgText] = useState("2");
   const [wasteDetails, setWasteDetails] = useState("");
   const [locationState, setLocationState] = useState<SelectedLocation>({
     address: "",
@@ -93,6 +100,24 @@ export default function RequestPickupScreen() {
   const [notes, setNotes] = useState("");
   const [imageUris, setImageUris] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+
+  // Preferred collector selection states
+  const [availableCollectors, setAvailableCollectors] = useState<CollectorMatchResult[]>([]);
+  const [selectedCollector, setSelectedCollector] = useState<CollectorMatchResult | null>(null);
+
+  useEffect(() => {
+    if (!profile) return;
+    listAvailableCollectors(profile.area, locationState).then((list) => {
+      setAvailableCollectors(list);
+    });
+  }, [profile, locationState]);
+
+  const quantityKg = parseFloat(quantityKgText) || 0;
+
+  const estimatedPayout = useMemo(() => {
+    if (!selectedCategory) return 0;
+    return calculateRecyclingPayout(selectedCategory, quantityKg);
+  }, [selectedCategory, quantityKg]);
 
   const estimate = useMemo(() => {
     if (!selectedCategory) {
@@ -218,6 +243,10 @@ export default function RequestPickupScreen() {
         preferredDateText,
         notes,
         imageUris,
+        quantityKg,
+        selectedCollectorId: selectedCollector?.collector.uid ?? null,
+        selectedCollectorName: selectedCollector?.collector.fullName ?? null,
+        payoutMode: "cash_on_delivery",
       });
 
       Alert.alert(
@@ -317,6 +346,93 @@ export default function RequestPickupScreen() {
                   <Text style={styles.categorySubtitle}>
                     {category.subtitle}
                   </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {/* Recyclable Cash Payout Estimator */}
+          {selectedCategory && RECYCLABLE_PAYOUT_RATES[selectedCategory] > 0 && (
+            <View style={styles.payoutCard}>
+              <View style={styles.payoutHeader}>
+                <MaterialCommunityIcons name="cash-multiple" size={24} color="#2E7D32" />
+                <View style={{ flex: 1, marginLeft: spacing.xs }}>
+                  <Text style={styles.payoutTitle}>Recycle & Earn Cash</Text>
+                  <Text style={styles.payoutSubtitle}>
+                    Rate: Rs. {RECYCLABLE_PAYOUT_RATES[selectedCategory]}/kg for {selectedCategory.toUpperCase()}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.quantityRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.inputLabel}>Estimated Quantity (kg / items)</Text>
+                  <TextInput
+                    style={styles.quantityInput}
+                    keyboardType="numeric"
+                    placeholder="Enter kg..."
+                    value={quantityKgText}
+                    onChangeText={setQuantityKgText}
+                  />
+                </View>
+
+                <View style={styles.payoutValueBox}>
+                  <Text style={styles.payoutValueLabel}>You Receive</Text>
+                  <Text style={styles.payoutValueText}>Rs. {estimatedPayout}</Text>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* Collector Picker Card */}
+          <View style={styles.collectorPickerCard}>
+            <Text style={styles.collectorPickerTitle}>Select Preferred Collector</Text>
+            <Text style={styles.collectorPickerSubtitle}>
+              Choose a local collector in your area or let Eco-Drop auto-assign the best ranked.
+            </Text>
+
+            <Pressable
+              style={[
+                styles.collectorOptionPill,
+                !selectedCollector && styles.collectorOptionPillSelected,
+              ]}
+              onPress={() => setSelectedCollector(null)}
+            >
+              <MaterialCommunityIcons
+                name="star-face"
+                size={22}
+                color={!selectedCollector ? colors.primaryDark : colors.textSoft}
+              />
+              <View style={{ flex: 1, marginLeft: spacing.xs }}>
+                <Text style={styles.collectorOptionName}>Auto-Match Best Collector</Text>
+                <Text style={styles.collectorOptionDetail}>Highest rated & closest vehicle assigned automatically</Text>
+              </View>
+              {!selectedCollector && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
+            </Pressable>
+
+            {availableCollectors.map((item) => {
+              const isSelected = selectedCollector?.collector.uid === item.collector.uid;
+              const rating = Number(item.collector.rating ?? 4.8);
+              return (
+                <Pressable
+                  key={item.collector.uid}
+                  style={[
+                    styles.collectorOptionPill,
+                    isSelected && styles.collectorOptionPillSelected,
+                  ]}
+                  onPress={() => setSelectedCollector(item)}
+                >
+                  <View style={styles.collectorAvatarWrap}>
+                    <MaterialCommunityIcons name="account-hard-hat" size={20} color={colors.primary} />
+                  </View>
+                  <View style={{ flex: 1, marginLeft: spacing.xs }}>
+                    <View style={{ flexDirection: "row", alignItems: "center" }}>
+                      <Text style={styles.collectorOptionName}>{item.collector.fullName}</Text>
+                      <Text style={styles.collectorRatingTag}> ★ {rating}</Text>
+                    </View>
+                    <Text style={styles.collectorOptionDetail}>{item.matchReason}</Text>
+                  </View>
+                  {isSelected && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
                 </Pressable>
               );
             })}
@@ -811,4 +927,127 @@ const styles = StyleSheet.create({
   disabledButton: {
     opacity: 0.6,
   },
-});
+
+  // Recyclable Cash Payout Styles
+  payoutCard: {
+    backgroundColor: "#E8F5E9",
+    borderRadius: radius.xl,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: "#C8E6C9",
+    ...softShadow,
+  },
+  payoutHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: spacing.sm,
+  },
+  payoutTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#1B5E20",
+  },
+  payoutSubtitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.primaryDeep,
+    marginTop: 2,
+  },
+  quantityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+  },
+  quantityInput: {
+    height: 44,
+    backgroundColor: "#FFF",
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    fontSize: 15,
+    fontWeight: "700",
+    color: colors.text,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  payoutValueBox: {
+    backgroundColor: "#2E7D32",
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 110,
+  },
+  payoutValueLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#E8F5E9",
+    textTransform: "uppercase",
+  },
+  payoutValueText: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#FFF",
+  },
+
+  // Collector Picker Styles
+  collectorPickerCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+    ...softShadow,
+  },
+  collectorPickerTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: colors.text,
+  },
+  collectorPickerSubtitle: {
+    fontSize: 12,
+    color: colors.textSoft,
+    fontWeight: "700",
+    marginTop: 2,
+    marginBottom: spacing.md,
+  },
+  collectorOptionPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceSoft,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.xs,
+  },
+  collectorOptionPillSelected: {
+    backgroundColor: "#E8F5E9",
+    borderColor: colors.primary,
+  },
+  collectorAvatarWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#FFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  collectorOptionName: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: colors.text,
+  },
+  collectorRatingTag: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#B7791F",
+    marginLeft: 4,
+  },
+  collectorOptionDetail: {
+    fontSize: 11,
+    color: colors.textSoft,
+    fontWeight: "700",
+    marginTop: 2,
+  },
+});

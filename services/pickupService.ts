@@ -14,6 +14,11 @@ export type CreatePickupRequestInput = {
   preferredDateText?: string;
   notes?: string;
 
+  quantityKg?: number;
+  selectedCollectorId?: string | null;
+  selectedCollectorName?: string | null;
+  payoutMode?: "cash_on_delivery" | "wallet";
+
   // Keep this for later, but we will not upload images now.
   imageUris?: string[];
 };
@@ -36,12 +41,27 @@ const CATEGORY_DROPS: Record<WasteCategory, number> = {
   mixed: 15,
 };
 
+// Recycling payout rates in LKR per kg/unit paid to residents
+export const RECYCLABLE_PAYOUT_RATES: Record<WasteCategory, number> = {
+  paper: 60,      // Rs 60 / kg for paper / cardboard
+  glass: 40,      // Rs 40 / kg (or per bottle)
+  electronic: 200, // Rs 200 / kg for e-waste
+  plastic: 80,    // Rs 80 / kg for plastic bottles
+  organic: 0,
+  mixed: 0,
+};
+
 export function calculateEstimatedPickupPrice(category: WasteCategory) {
   return CATEGORY_PRICE[category] ?? 200;
 }
 
 export function calculateEcoDropsForCategory(category: WasteCategory) {
   return CATEGORY_DROPS[category] ?? 20;
+}
+
+export function calculateRecyclingPayout(category: WasteCategory, quantityKg: number = 0): number {
+  const rate = RECYCLABLE_PAYOUT_RATES[category] ?? 0;
+  return Math.round(rate * Math.max(0, quantityKg));
 }
 
 export async function createPickupRequest(input: CreatePickupRequestInput) {
@@ -61,13 +81,26 @@ export async function createPickupRequest(input: CreatePickupRequestInput) {
 
   const status: PickupStatus = "submitted";
 
-  // Find top matched collector in area using ranking algorithm
   const locationObj = {
     address: input.address.trim(),
     latitude: input.latitude ?? 6.9271,
     longitude: input.longitude ?? 79.8612,
   };
-  const bestMatch = await findBestCollectorForPickup(resident.area, locationObj);
+
+  let matchedCollectorId = input.selectedCollectorId ?? null;
+  let matchedCollectorName = input.selectedCollectorName ?? null;
+  let matchScore = 100;
+  let matchReason = "Directly selected by resident";
+
+  if (!matchedCollectorId) {
+    const bestMatch = await findBestCollectorForPickup(resident.area, locationObj);
+    matchedCollectorId = bestMatch?.collector.uid ?? null;
+    matchedCollectorName = bestMatch?.collector.fullName ?? null;
+    matchScore = bestMatch?.matchScore ?? 0;
+    matchReason = bestMatch?.matchReason ?? "No active collector matched yet";
+  }
+
+  const estimatedPayout = calculateRecyclingPayout(wasteCategory, input.quantityKg ?? 0);
 
   const pickupData = {
     residentId: resident.uid,
@@ -77,13 +110,20 @@ export async function createPickupRequest(input: CreatePickupRequestInput) {
     collectorId: null,
     collectorName: null,
 
-    matchedCollectorId: bestMatch?.collector.uid ?? null,
-    matchedCollectorName: bestMatch?.collector.fullName ?? null,
-    matchScore: bestMatch?.matchScore ?? 0,
-    matchReason: bestMatch?.matchReason ?? "No active collector matched yet",
+    matchedCollectorId,
+    matchedCollectorName,
+    selectedCollectorId: input.selectedCollectorId ?? null,
+    selectedCollectorName: input.selectedCollectorName ?? null,
+
+    matchScore,
+    matchReason,
 
     wasteCategory,
     wasteDetails: input.wasteDetails.trim(),
+
+    quantityKg: input.quantityKg ?? 0,
+    estimatedPayout,
+    payoutMode: input.payoutMode ?? "cash_on_delivery",
 
     imageUrls: [],
     location: locationObj,

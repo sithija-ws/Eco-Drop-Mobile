@@ -134,3 +134,100 @@ export async function findBestCollectorForPickup(
     return null;
   }
 }
+
+/**
+ * List all active collectors ranked by proximity, rating, and availability for resident selection
+ */
+export async function listAvailableCollectors(
+  area?: { district?: string; gnDivision?: string } | null,
+  pickupLocation?: PickupLocation
+): Promise<CollectorMatchResult[]> {
+  try {
+    let collectors: EcoUserProfile[] = [];
+    try {
+      const collectorsQuery = query(
+        collection(db, "users"),
+        where("role", "==", "collector")
+      );
+      const collectorsSnap = await getDocs(collectorsQuery);
+      collectors = collectorsSnap.docs.map((d) => ({
+        uid: d.id,
+        ...d.data(),
+      })) as EcoUserProfile[];
+    } catch (e) {
+      console.warn("Could not list available collectors:", e);
+      return [];
+    }
+
+    if (collectors.length === 0) return [];
+
+    const workloadMap: Record<string, number> = {};
+    try {
+      const activeJobsQuery = query(
+        collection(db, "pickupRequests"),
+        where("status", "in", ["accepted", "collector_on_the_way", "collected"])
+      );
+      const activeJobsSnap = await getDocs(activeJobsQuery);
+      activeJobsSnap.docs.forEach((d) => {
+        const job = d.data() as PickupRequest;
+        if (job.collectorId) {
+          workloadMap[job.collectorId] = (workloadMap[job.collectorId] || 0) + 1;
+        }
+      });
+    } catch (e) {
+      // Graceful fallback
+    }
+
+    const ranked: CollectorMatchResult[] = collectors.map((collector) => {
+      const activeWorkload = workloadMap[collector.uid] || 0;
+      const rating = Number(collector.rating ?? 4.8);
+      const ratingScore = Math.min(40, (rating / 5) * 40);
+      const workloadScore = Math.max(0, 35 - activeWorkload * 10);
+      let proximityScore = 10;
+      let locationReason = "Regional Collector";
+
+      if (area?.gnDivision && collector.area?.gnDivision === area.gnDivision) {
+        proximityScore = 25;
+        locationReason = `GN Division (${area.gnDivision})`;
+      } else if (area?.district && collector.area?.district === area.district) {
+        proximityScore = 18;
+        locationReason = `District (${area.district})`;
+      }
+
+      if (
+        pickupLocation?.latitude &&
+        pickupLocation?.longitude &&
+        collector.currentLocation?.latitude &&
+        collector.currentLocation?.longitude
+      ) {
+        const distKm = calculateHaversineDistanceKm(
+          pickupLocation.latitude,
+          pickupLocation.longitude,
+          collector.currentLocation.latitude,
+          collector.currentLocation.longitude
+        );
+        locationReason = `${distKm} km away`;
+        if (distKm <= 3) proximityScore = 25;
+        else if (distKm <= 10) proximityScore = 20;
+        else proximityScore = 12;
+      }
+
+      const totalScore = Math.round(ratingScore + workloadScore + proximityScore);
+      const reason = `${rating}★ • ${activeWorkload} active jobs • ${locationReason}`;
+
+      return {
+        collector,
+        matchScore: totalScore,
+        matchReason: reason,
+        activeWorkload,
+      };
+    });
+
+    ranked.sort((a, b) => b.matchScore - a.matchScore);
+    return ranked;
+  } catch (error) {
+    console.warn("Error listing available collectors", error);
+    return [];
+  }
+}
+

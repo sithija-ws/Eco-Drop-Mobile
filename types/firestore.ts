@@ -51,6 +51,14 @@ export type PickupRequest = {
   completedAt?: FirestoreDate;
   status: PickupStatus;
   price?: number;
+  estimatedPayout?: number;
+  quantityKg?: number;
+  payoutMode?: "cash_on_delivery" | "wallet";
+  selectedCollectorId?: string | null;
+  selectedCollectorName?: string | null;
+  rating?: number;
+  ratingReview?: string;
+  ratedAt?: FirestoreDate;
   ecoDrops?: number;
   notes?: string;
 };

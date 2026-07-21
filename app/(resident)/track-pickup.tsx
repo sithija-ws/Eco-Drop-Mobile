@@ -24,12 +24,20 @@ import {
   formatDistanceDisplay,
   isCollectorNearDestination,
 } from "../../services/collectorMapService";
+import { rateCollectorJob } from "../../services/ratingService";
 import type { PickupRequest } from "../../types/firestore";
+import { Alert, Modal, TextInput } from "react-native";
 
 export default function TrackPickupScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [pickup, setPickup] = useState<PickupRequest | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Rating Modal States
+  const [ratingModalVisible, setRatingModalVisible] = useState(false);
+  const [selectedStars, setSelectedStars] = useState(5);
+  const [reviewComment, setReviewComment] = useState("");
+  const [submittingRating, setSubmittingRating] = useState(false);
 
   // Live driver location state
   const [driverCoords, setDriverCoords] = useState<{
@@ -164,6 +172,25 @@ export default function TrackPickupScreen() {
   };
 
   const currentStep = getStatusStep(pickup.status);
+
+  const handleRatingSubmit = async () => {
+    if (!pickup?.id || !pickup?.collectorId) {
+      Alert.alert("Rating unavailable", "No collector is assigned to this job yet.");
+      return;
+    }
+
+    try {
+      setSubmittingRating(true);
+      await rateCollectorJob(pickup.id, pickup.collectorId, selectedStars, reviewComment);
+      setRatingModalVisible(false);
+      Alert.alert("Thank You!", "Your rating and review have been submitted.");
+    } catch (e) {
+      console.warn("Submit rating failed:", e);
+      Alert.alert("Error", "Could not submit rating. Please try again.");
+    } finally {
+      setSubmittingRating(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
@@ -310,6 +337,31 @@ export default function TrackPickupScreen() {
           )}
         </View>
 
+        {/* Rate Collector Button / Rating Card */}
+        {pickup.collectorId && (pickup.status === "completed" || pickup.status === "collected") && (
+          <View style={styles.ratingSectionCard}>
+            {pickup.rating ? (
+              <View style={styles.ratedBox}>
+                <Ionicons name="star" size={20} color="#FFB300" />
+                <Text style={styles.ratedText}>
+                  You rated {pickup.collectorName || "collector"} {pickup.rating} Stars
+                </Text>
+                {pickup.ratingReview ? (
+                  <Text style={styles.ratedReviewText}>"{pickup.ratingReview}"</Text>
+                ) : null}
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.rateCollectorBtn}
+                onPress={() => setRatingModalVisible(true)}
+              >
+                <Ionicons name="star" size={20} color="#FFF" />
+                <Text style={styles.rateCollectorBtnText}>Rate & Review Collector</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
         {/* Request Details */}
         <View style={styles.detailsCard}>
           <Text style={styles.detailsTitle}>Pickup Details</Text>
@@ -319,6 +371,20 @@ export default function TrackPickupScreen() {
               {pickup.wasteCategory.toUpperCase()}
             </Text>
           </View>
+          {Boolean(pickup.quantityKg) && (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Est. Quantity:</Text>
+              <Text style={styles.detailValue}>{pickup.quantityKg} kg</Text>
+            </View>
+          )}
+          {Boolean(pickup.estimatedPayout) && (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Cash Payout to You:</Text>
+              <Text style={[styles.detailValue, { color: "#2E7D32", fontWeight: "900" }]}>
+                Rs. {pickup.estimatedPayout}
+              </Text>
+            </View>
+          )}
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Address:</Text>
             <Text style={styles.detailValue}>
@@ -333,6 +399,61 @@ export default function TrackPickupScreen() {
           </View>
         </View>
       </ScrollView>
+
+      {/* 5-Star Collector Rating Modal */}
+      <Modal visible={ratingModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Rate Collector Service</Text>
+            <Text style={styles.modalSubtitle}>
+              How was your waste pickup experience with {pickup?.collectorName || "your collector"}?
+            </Text>
+
+            <View style={styles.starRow}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <TouchableOpacity
+                  key={star}
+                  onPress={() => setSelectedStars(star)}
+                  style={{ padding: 6 }}
+                >
+                  <Ionicons
+                    name={star <= selectedStars ? "star" : "star-outline"}
+                    size={36}
+                    color="#FFB300"
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TextInput
+              style={styles.reviewInput}
+              placeholder="Write a comment or review (optional)..."
+              value={reviewComment}
+              onChangeText={setReviewComment}
+              multiline
+            />
+
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity
+                style={styles.cancelModalBtn}
+                onPress={() => setRatingModalVisible(false)}
+              >
+                <Text style={styles.cancelModalBtnText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.submitModalBtn}
+                onPress={handleRatingSubmit}
+                disabled={submittingRating}
+              >
+                <Text style={styles.submitModalBtnText}>
+                  {submittingRating ? "Submitting..." : "Submit Review"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -545,4 +666,122 @@ const styles = StyleSheet.create({
     color: "#E8F5E9",
     marginTop: 2,
   },
+
+  // Rating Section Styles
+  ratingSectionCard: {
+    backgroundColor: "#FFF",
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    ...softShadow,
+  },
+  rateCollectorBtn: {
+    backgroundColor: "#FFB300",
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+  },
+  rateCollectorBtnText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#FFF",
+  },
+  ratedBox: {
+    alignItems: "center",
+    paddingVertical: spacing.xs,
+  },
+  ratedText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: colors.text,
+    marginTop: 4,
+  },
+  ratedReviewText: {
+    fontSize: 12,
+    fontStyle: "italic",
+    color: colors.textSoft,
+    marginTop: 2,
+  },
+
+  // Rating Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: spacing.lg,
+  },
+  modalContent: {
+    width: "100%",
+    backgroundColor: "#FFF",
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    alignItems: "center",
+    ...softShadow,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: colors.text,
+  },
+  modalSubtitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.textSoft,
+    textAlign: "center",
+    marginTop: 4,
+    marginBottom: spacing.md,
+  },
+  starRow: {
+    flexDirection: "row",
+    gap: 4,
+    marginBottom: spacing.md,
+  },
+  reviewInput: {
+    width: "100%",
+    height: 80,
+    backgroundColor: colors.surfaceSoft,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    fontSize: 13,
+    color: colors.text,
+    textAlignVertical: "top",
+    marginBottom: spacing.md,
+  },
+  modalBtnRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    width: "100%",
+  },
+  cancelModalBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cancelModalBtnText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: colors.textSoft,
+  },
+  submitModalBtn: {
+    flex: 2,
+    height: 44,
+    borderRadius: radius.md,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  submitModalBtnText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#FFF",
+  },
 });
+

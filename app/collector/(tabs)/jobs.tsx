@@ -693,9 +693,17 @@ function JobCard({
       </View>
 
       <View style={styles.metaRow}>
+        {Boolean(job.estimatedPayout) && (
+          <View style={[styles.metaPill, { backgroundColor: "#E8F5E9" }]}>
+            <MaterialCommunityIcons name="cash-fast" size={13} color="#2E7D32" />
+            <Text style={[styles.metaText, { color: "#2E7D32" }]}>
+              Pay Resident: Rs. {job.estimatedPayout} ({job.quantityKg ?? 0}kg)
+            </Text>
+          </View>
+        )}
         <View style={styles.metaPill}>
           <MaterialCommunityIcons name="cash" size={13} color={colors.primaryDeep} />
-          <Text style={styles.metaText}>Rs. {Number(job.price ?? 0).toFixed(2)}</Text>
+          <Text style={styles.metaText}>Fee: Rs. {Number(job.price ?? 0).toFixed(2)}</Text>
         </View>
         <View style={styles.metaPill}>
           <MaterialCommunityIcons name="leaf" size={13} color={colors.primaryDeep} />
