@@ -35,38 +35,43 @@ export async function findBestCollectorForPickup(
 ): Promise<CollectorMatchResult | null> {
   try {
     // 1. Fetch active collectors
-    const collectorsQuery = query(
-      collection(db, "users"),
-      where("role", "==", "collector"),
-      where("status", "==", "active")
-    );
-
-    const collectorsSnap = await getDocs(collectorsQuery);
-    if (collectorsSnap.empty) {
+    let collectors: EcoUserProfile[] = [];
+    try {
+      const collectorsQuery = query(
+        collection(db, "users"),
+        where("role", "==", "collector")
+      );
+      const collectorsSnap = await getDocs(collectorsQuery);
+      collectors = collectorsSnap.docs.map((d) => ({
+        uid: d.id,
+        ...d.data(),
+      })) as EcoUserProfile[];
+    } catch (e) {
+      console.warn("Could not query collectors list:", e);
       return null;
     }
 
-    const collectors = collectorsSnap.docs.map((d) => ({
-      uid: d.id,
-      ...d.data(),
-    })) as EcoUserProfile[];
+    if (collectors.length === 0) {
+      return null;
+    }
 
-    // 2. Fetch active assigned jobs to measure workload
-    const activeJobsQuery = query(
-      collection(db, "pickupRequests"),
-      where("status", "in", ["accepted", "collector_on_the_way", "collected"])
-    );
-
-    const activeJobsSnap = await getDocs(activeJobsQuery);
-    const activeJobs = activeJobsSnap.docs.map((d) => d.data()) as PickupRequest[];
-
-    // Map collector workload count
+    // 2. Fetch active assigned jobs to measure workload (graceful fallback if restricted)
     const workloadMap: Record<string, number> = {};
-    activeJobs.forEach((job) => {
-      if (job.collectorId) {
-        workloadMap[job.collectorId] = (workloadMap[job.collectorId] || 0) + 1;
-      }
-    });
+    try {
+      const activeJobsQuery = query(
+        collection(db, "pickupRequests"),
+        where("status", "in", ["accepted", "collector_on_the_way", "collected"])
+      );
+      const activeJobsSnap = await getDocs(activeJobsQuery);
+      activeJobsSnap.docs.forEach((d) => {
+        const job = d.data() as PickupRequest;
+        if (job.collectorId) {
+          workloadMap[job.collectorId] = (workloadMap[job.collectorId] || 0) + 1;
+        }
+      });
+    } catch (e) {
+      // Non-critical: If resident lacks permission to list all pickup requests, continue with 0 workload
+    }
 
     // 3. Score each collector
     const ranked: CollectorMatchResult[] = collectors.map((collector) => {

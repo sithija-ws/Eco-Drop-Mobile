@@ -26,18 +26,22 @@ export async function updateCollectorGpsLocation(
 ) {
   if (!collectorId) return;
 
-  const ref = doc(db, "collectorLiveLocations", collectorId);
-  await setDoc(
-    ref,
-    {
-      collectorId,
-      latitude,
-      longitude,
-      heading,
-      updatedAt: serverTimestamp(),
-    },
-    { merge: true }
-  );
+  try {
+    const ref = doc(db, "collectorLiveLocations", collectorId);
+    await setDoc(
+      ref,
+      {
+        collectorId,
+        latitude,
+        longitude,
+        heading,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    console.warn("Could not update collector GPS location:", error);
+  }
 }
 
 /**

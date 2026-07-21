@@ -40,12 +40,19 @@ export default function TrackPickupScreen() {
   useEffect(() => {
     if (!id) return;
 
-    const unsub = onSnapshot(doc(db, "pickupRequests", id), (docSnap) => {
-      if (docSnap.exists()) {
-        setPickup({ id: docSnap.id, ...docSnap.data() } as PickupRequest);
+    const unsub = onSnapshot(
+      doc(db, "pickupRequests", id),
+      (docSnap) => {
+        if (docSnap.exists()) {
+          setPickup({ id: docSnap.id, ...docSnap.data() } as PickupRequest);
+        }
+        setLoading(false);
+      },
+      (error) => {
+        console.warn("Track pickup snapshot listener error:", error);
+        setLoading(false);
       }
-      setLoading(false);
-    });
+    );
 
     return () => unsub();
   }, [id]);
