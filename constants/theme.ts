@@ -35,6 +35,25 @@ export const radius = {
   pill: 999,
 };
 
+export const gradients = {
+  splash: ["#092617", "#0F3D24", "#1B6E41"],
+  emerald: ["#1B6E41", "#28D46A"],
+  gold: ["#FFD700", "#FF8C00"],
+};
+
+export const glowShadow = Platform.select({
+  ios: {
+    shadowColor: "#28D46A",
+    shadowOpacity: 0.45,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+  },
+  android: {
+    elevation: 10,
+  },
+  default: {},
+}) ?? {};
+
 export const softShadow =
   Platform.select({
     ios: {

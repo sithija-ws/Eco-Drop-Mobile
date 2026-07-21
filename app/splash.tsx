@@ -1,30 +1,13 @@
-import { View, Text, StyleSheet } from "react-native";
+import React from "react";
+import AnimatedSplashScreen from "../components/common/AnimatedSplashScreen";
+import { router } from "expo-router";
 
 export default function SplashScreen() {
   return (
-    <View style={styles.container}>
-      <Text style={styles.logo}>🌱 Eco Drop</Text>
-      <Text style={styles.subtitle}>Smart Waste Management</Text>
-    </View>
+    <AnimatedSplashScreen
+      statusText="Welcome to Eco-Drop Platform"
+      autoComplete
+      onAnimationComplete={() => router.replace("/" as never)}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F6FFF8",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-  },
-  logo: {
-    fontSize: 34,
-    fontWeight: "800",
-    color: "#1B7F3A",
-    marginBottom: 12,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: "#4B6352",
-  },
-});
