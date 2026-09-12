@@ -17,7 +17,7 @@ import {
   PrimaryButton,
   SecureBadge,
 } from "../../components/auth/AuthUI";
-import { loginEcoUser } from "../../services/authService";
+import { loginEcoUser, loginWithGoogleEcoUser } from "../../services/authService";
 import { getFirebaseErrorMessage } from "../../utils/firebaseErrors";
 import { getHomeRouteForRole } from "../../utils/roleRoutes";
 import { colors, radius, softShadow, spacing } from "../../constants/theme";
@@ -26,6 +26,7 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   const handleLogin = async () => {
     if (!email.trim() || !password) {
@@ -38,11 +39,31 @@ export default function LoginScreen() {
 
       const { profile } = await loginEcoUser(email, password);
 
-      router.replace(getHomeRouteForRole(profile.role));
+      if (profile) {
+        router.replace(getHomeRouteForRole(profile.role));
+      }
     } catch (error) {
       Alert.alert("Login failed", getFirebaseErrorMessage(error));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      setGoogleLoading(true);
+      const { profile } = await loginWithGoogleEcoUser();
+      if (profile) {
+        router.replace(getHomeRouteForRole(profile.role));
+      }
+    } catch (error: any) {
+      console.warn("Google login error:", error);
+      Alert.alert(
+        "Google Login",
+        error.message || "Failed to sign in with Google."
+      );
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -104,13 +125,19 @@ export default function LoginScreen() {
             </View>
 
             <View style={styles.socialRow}>
-              <Pressable style={styles.socialButton}>
+              <Pressable
+                style={[styles.socialButton, googleLoading && { opacity: 0.6 }]}
+                onPress={handleGoogleLogin}
+                disabled={googleLoading || loading}
+              >
                 <MaterialCommunityIcons
                   name="google"
                   size={18}
                   color="#111827"
                 />
-                <Text style={styles.socialText}>Google</Text>
+                <Text style={styles.socialText}>
+                  {googleLoading ? "Signing in..." : "Google"}
+                </Text>
               </Pressable>
 
               <Pressable style={styles.socialButton}>

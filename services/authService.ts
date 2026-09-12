@@ -1,6 +1,8 @@
 import {
   createUserWithEmailAndPassword,
+  GoogleAuthProvider,
   signInWithEmailAndPassword,
+  signInWithPopup,
   signOut,
   updateProfile,
 } from "firebase/auth";
@@ -102,6 +104,49 @@ export async function registerEcoUser(draft: SignupDraft) {
 
   return {
     firebaseUser: credential.user,
+    profile,
+  };
+}
+
+export async function loginWithGoogleEcoUser() {
+  const provider = new GoogleAuthProvider();
+  const credential = await signInWithPopup(auth, provider);
+  const user = credential.user;
+
+  let profile = await getUserProfile(user.uid);
+
+  if (!profile) {
+    profile = {
+      uid: user.uid,
+      fullName: user.displayName || "Eco User",
+      email: user.email || "",
+      phone: user.phoneNumber || "",
+      role: "resident",
+      status: "active",
+      area: {
+        district: "Colombo",
+        dsDivision: "Colombo Fort",
+        gnDivision: "Colombo Fort",
+      },
+      photoURL: user.photoURL,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    };
+
+    await setDoc(doc(db, "users", user.uid), profile);
+  }
+
+  if (!profile) {
+    throw new Error("Could not load or create user profile.");
+  }
+
+  if (profile.status === "disabled") {
+    await signOut(auth);
+    throw new Error("This account has been disabled.");
+  }
+
+  return {
+    firebaseUser: user,
     profile,
   };
 }
