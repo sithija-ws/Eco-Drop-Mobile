@@ -93,6 +93,10 @@ export default function CollectorDashboardScreen() {
     try {
       setAcceptingId(request.id);
       await acceptPickupRequest(request.id, profile);
+      Alert.alert(
+        "Job Accepted 🚚",
+        "Pickup job accepted! Resident can now track your live distance & ETA."
+      );
     } catch (error) {
       console.warn(error);
       Alert.alert("Could not accept request", "Please try again.");

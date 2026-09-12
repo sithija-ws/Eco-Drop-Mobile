@@ -176,6 +176,45 @@ export function isCollectorNearDestination(
 }
 
 /**
+ * Format estimated arrival time with clock time (e.g. "~ 5 mins (Arrival at 12:25 PM)")
+ */
+export function formatEtaDisplay(etaMinutes: number): {
+  etaText: string;
+  expectedTimeStr: string;
+} {
+  const arrivalDate = new Date(Date.now() + etaMinutes * 60 * 1000);
+  const hours = arrivalDate.getHours();
+  const mins = arrivalDate.getMinutes().toString().padStart(2, "0");
+  const ampm = hours >= 12 ? "PM" : "AM";
+  const formattedHours = hours % 12 || 12;
+  const expectedTimeStr = `${formattedHours}:${mins} ${ampm}`;
+
+  const etaText =
+    etaMinutes <= 1
+      ? "Arriving now"
+      : `~ ${etaMinutes} mins (Arrival at ${expectedTimeStr})`;
+
+  return { etaText, expectedTimeStr };
+}
+
+/**
+ * Check if location update was recorded recently (within last 120s)
+ */
+export function isLocationBroadcastingFresh(updatedAt: any): boolean {
+  if (!updatedAt) return false;
+  let timestampMs = 0;
+  if (typeof updatedAt === "object" && updatedAt !== null && "toMillis" in updatedAt) {
+    timestampMs = (updatedAt as any).toMillis();
+  } else if (updatedAt instanceof Date) {
+    timestampMs = updatedAt.getTime();
+  } else if (typeof updatedAt === "number") {
+    timestampMs = updatedAt;
+  }
+  if (!timestampMs) return false;
+  return Date.now() - timestampMs < 120000;
+}
+
+/**
  * Open external Turn-by-Turn GPS Navigation App (Google Maps / Apple Maps)
  */
 export function openExternalNavigation(

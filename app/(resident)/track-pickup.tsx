@@ -22,6 +22,8 @@ import {
   calculateDistanceKm,
   calculateBearing,
   formatDistanceDisplay,
+  formatEtaDisplay,
+  isLocationBroadcastingFresh,
   isCollectorNearDestination,
 } from "../../services/collectorMapService";
 import { rateCollectorJob } from "../../services/ratingService";
@@ -44,6 +46,7 @@ export default function TrackPickupScreen() {
     latitude: number;
     longitude: number;
     heading?: number;
+    updatedAt?: any;
   }>({
     latitude: 6.9200,
     longitude: 79.8550,
@@ -90,6 +93,7 @@ export default function TrackPickupScreen() {
               latitude: location.latitude,
               longitude: location.longitude,
               heading: location.heading ?? calculatedHeading,
+              updatedAt: location.updatedAt,
             };
           });
         }
@@ -261,13 +265,26 @@ export default function TrackPickupScreen() {
         {/* Status Stepper Card */}
         <View style={styles.statusCard}>
           <View style={styles.etaHeader}>
-            <View>
-              <Text style={styles.etaTitle}>Estimated Arrival</Text>
+            <View style={{ flex: 1, marginRight: spacing.xs }}>
+              <View style={styles.etaTitleRow}>
+                <Text style={styles.etaTitle}>Estimated Arrival</Text>
+                {isLocationBroadcastingFresh(driverCoords.updatedAt) && (
+                  <View style={styles.liveBroadcastPill}>
+                    <View style={styles.liveBroadcastDot} />
+                    <Text style={styles.liveBroadcastText}>Broadcasting Live</Text>
+                  </View>
+                )}
+              </View>
               <Text style={styles.etaValue}>
                 {pickup.status === "completed"
                   ? "Completed"
-                  : `~ ${etaMinutes} mins (${formatDistanceDisplay(distanceKm)})`}
+                  : formatEtaDisplay(etaMinutes).etaText}
               </Text>
+              {pickup.status !== "completed" && (
+                <Text style={styles.etaSubDetail}>
+                  Distance away: {formatDistanceDisplay(distanceKm)}
+                </Text>
+              )}
             </View>
             <View style={styles.statusBadge}>
               <Text style={styles.statusBadgeText}>
@@ -534,14 +551,47 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: spacing.md,
   },
+  etaTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
   etaTitle: {
     fontSize: 13,
     color: colors.textSoft,
   },
+  liveBroadcastPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#E6F4EA",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: "rgba(16, 185, 129, 0.3)",
+  },
+  liveBroadcastDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#10B981",
+  },
+  liveBroadcastText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: colors.primaryDeep,
+  },
   etaValue: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "800",
-    color: colors.primary,
+    color: colors.primaryDeep,
+    marginTop: 2,
+  },
+  etaSubDetail: {
+    fontSize: 12,
+    color: colors.textSoft,
+    fontWeight: "600",
     marginTop: 2,
   },
   statusBadge: {

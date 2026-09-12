@@ -275,7 +275,11 @@ export default function CollectorJobsScreen() {
     try {
       setUpdatingId(request.id);
       await acceptPickupRequest(request.id, profile);
-      Alert.alert("Job Accepted", "Pickup job added to active tasks.");
+      setIsGpsBroadcasting(true);
+      Alert.alert(
+        "Job Accepted 🚚",
+        "Job added! Live GPS broadcasting is ACTIVE so the resident can track your distance & ETA."
+      );
     } catch (error) {
       console.warn(error);
       Alert.alert("Accept failed", "Please try again.");
@@ -295,6 +299,9 @@ export default function CollectorJobsScreen() {
     try {
       setUpdatingId(job.id);
       await updatePickupStatus(job.id, nextStatus);
+      if (nextStatus === "collector_on_the_way" || nextStatus === "accepted") {
+        setIsGpsBroadcasting(true);
+      }
 
       if (selectedJob?.id === job.id) {
         setSelectedJob((prev) => (prev ? { ...prev, status: nextStatus } : null));

@@ -22,6 +22,15 @@ import {
 } from "../../../services/dashboardService";
 import type { PickupRequest, SmartBin } from "../../../types/firestore";
 import { colors, radius, softShadow, spacing } from "../../../constants/theme";
+import {
+  subscribeCollectorLocation,
+  calculateDistanceKm,
+  estimateArrivalMinutes,
+  formatDistanceDisplay,
+  formatEtaDisplay,
+  isLocationBroadcastingFresh,
+  type CollectorGpsState,
+} from "../../../services/collectorMapService";
 
 type MaterialIconName = React.ComponentProps<
   typeof MaterialCommunityIcons
@@ -310,6 +319,45 @@ function StatCard({
 }
 
 function ActivePickupCard({ pickup }: { pickup: PickupRequest }) {
+  const [driverLoc, setDriverLoc] = useState<CollectorGpsState | null>(null);
+
+  useEffect(() => {
+    if (!pickup.collectorId) return;
+
+    const unsub = subscribeCollectorLocation(pickup.collectorId, (loc) => {
+      setDriverLoc(loc);
+    });
+
+    return () => unsub();
+  }, [pickup.collectorId]);
+
+  const pickupLat = pickup.location?.latitude || 6.9271;
+  const pickupLng = pickup.location?.longitude || 79.8612;
+
+  let distanceText = "";
+  let etaText = "";
+  let isLiveBroadcasting = false;
+
+  if (driverLoc?.latitude && driverLoc?.longitude) {
+    const distKm = calculateDistanceKm(
+      driverLoc.latitude,
+      driverLoc.longitude,
+      pickupLat,
+      pickupLng
+    );
+    const etaMins = estimateArrivalMinutes(
+      driverLoc.latitude,
+      driverLoc.longitude,
+      pickupLat,
+      pickupLng
+    );
+
+    distanceText = formatDistanceDisplay(distKm);
+    const etaFormatted = formatEtaDisplay(etaMins);
+    etaText = etaFormatted.etaText;
+    isLiveBroadcasting = isLocationBroadcastingFresh(driverLoc.updatedAt);
+  }
+
   return (
     <View style={styles.pickupCard}>
       <LinearGradient
@@ -319,9 +367,16 @@ function ActivePickupCard({ pickup }: { pickup: PickupRequest }) {
         style={styles.pickupIllustration}
       >
         <View style={styles.onTheWayPill}>
-          <View style={styles.liveDot} />
+          <View
+            style={[
+              styles.liveDot,
+              isLiveBroadcasting && { backgroundColor: "#10B981" },
+            ]}
+          />
           <Text style={styles.onTheWayText}>
-            {formatPickupStatus(pickup.status)}
+            {isLiveBroadcasting
+              ? `Live • ${distanceText} away`
+              : formatPickupStatus(pickup.status)}
           </Text>
         </View>
 
@@ -354,13 +409,33 @@ function ActivePickupCard({ pickup }: { pickup: PickupRequest }) {
             </Text>
           ) : null}
 
-          {["accepted", "collector_on_the_way", "collected"].includes(pickup.status) ? (
+          {distanceText ? (
+            <View style={styles.liveMetricsBadge}>
+              <Ionicons
+                name="navigate-circle-outline"
+                size={15}
+                color={colors.primaryDeep}
+              />
+              <Text style={styles.liveMetricsText}>
+                {distanceText} away • {etaText}
+              </Text>
+            </View>
+          ) : null}
+
+          {["accepted", "collector_on_the_way", "collected"].includes(
+            pickup.status
+          ) ? (
             <Pressable
               style={styles.trackLiveBtn}
-              onPress={() => router.push("/(resident)/(tabs)/schedule" as never)}
+              onPress={() =>
+                router.push({
+                  pathname: "/(resident)/track-pickup",
+                  params: { id: pickup.id },
+                })
+              }
             >
               <MaterialCommunityIcons name="bus-marker" size={15} color="#FFFFFF" />
-              <Text style={styles.trackLiveBtnText}>Track Live Tractor</Text>
+              <Text style={styles.trackLiveBtnText}>Track Live GPS Map</Text>
             </Pressable>
           ) : null}
         </View>
@@ -1086,6 +1161,24 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 11,
     fontWeight: "900",
+  },
+  liveMetricsBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginTop: 4,
+    backgroundColor: colors.surfaceSoft,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radius.md,
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderColor: "rgba(40, 212, 106, 0.3)",
+  },
+  liveMetricsText: {
+    color: colors.primaryDeep,
+    fontSize: 11,
+    fontWeight: "700",
   },
   emptySmallSubtitle: {
     marginTop: 2,
