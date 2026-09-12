@@ -116,7 +116,15 @@ service cloud.firestore {
       allow update, delete: if isAdmin() || (resource.data.userId == request.auth.uid);
     }
 
+    // 9. Notifications Collection
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
     // Default catch-all rule (for development flexibility)
+
     match /{document=**} {
       allow read, write: if isAuthenticated();
     }

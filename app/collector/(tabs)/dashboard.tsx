@@ -11,9 +11,11 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { router } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useAuth } from "../../../context/AuthContext";
+import { useNotifications } from "../../../context/NotificationContext";
 import {
   acceptPickupRequest,
   calculateTodayEarnings,
@@ -32,6 +34,7 @@ type MaterialIconName = React.ComponentProps<
 
 export default function CollectorDashboardScreen() {
   const { profile, refreshProfile } = useAuth();
+  const { unreadCount } = useNotifications();
 
   const [assignedJobs, setAssignedJobs] = useState<PickupRequest[]>([]);
   const [incomingRequests, setIncomingRequests] = useState<PickupRequest[]>([]);
@@ -154,12 +157,23 @@ export default function CollectorDashboardScreen() {
               </Text>
             </View>
 
-            <Pressable style={styles.iconButton} hitSlop={10}>
+            <Pressable
+              style={styles.iconButton}
+              hitSlop={10}
+              onPress={() => router.push("/notifications")}
+            >
               <Ionicons
-                name="notifications-outline"
+                name={unreadCount > 0 ? "notifications" : "notifications-outline"}
                 size={20}
-                color={colors.text}
+                color={unreadCount > 0 ? colors.primaryDeep : colors.text}
               />
+              {unreadCount > 0 && (
+                <View style={styles.badgeContainer}>
+                  <Text style={styles.badgeText}>
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </Text>
+                </View>
+              )}
             </Pressable>
           </View>
         </View>
@@ -593,7 +607,27 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     alignItems: "center",
     justifyContent: "center",
+    position: "relative",
     ...softShadow,
+  },
+  badgeContainer: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    backgroundColor: "#EF4444",
+    borderRadius: 9,
+    minWidth: 18,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: colors.surface,
+  },
+  badgeText: {
+    color: "#FFFFFF",
+    fontSize: 9,
+    fontWeight: "900",
   },
   secureRow: {
     flexDirection: "row",

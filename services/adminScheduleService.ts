@@ -3,6 +3,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDocs,
   onSnapshot,
   query,
   serverTimestamp,
@@ -11,6 +12,7 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "../lib/firebase";
+import { notifyScheduleAlert } from "./notificationService";
 import type { CollectionSchedule, DayOfWeek, WasteCategory } from "../types/firestore";
 
 export type CreateScheduleInput = {
@@ -104,6 +106,26 @@ export async function createCollectionSchedule(input: CreateScheduleInput) {
   };
 
   const docRef = await addDoc(collection(db, "collectionSchedules"), data);
+
+  try {
+    const residentsQuery = query(
+      collection(db, "users"),
+      where("area.gnDivision", "==", input.gnDivision.trim())
+    );
+    const snap = await getDocs(residentsQuery);
+    const targetUserIds = snap.docs.map((d) => d.id);
+    if (targetUserIds.length > 0) {
+      await notifyScheduleAlert(
+        targetUserIds,
+        input.title.trim(),
+        input.dayOfWeek,
+        input.timeSlot.trim(),
+        docRef.id
+      );
+    }
+  } catch (err) {
+    console.warn("Could not notify residents of new schedule:", err);
+  }
 
   return {
     id: docRef.id,

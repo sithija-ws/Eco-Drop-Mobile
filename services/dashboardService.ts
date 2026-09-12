@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   onSnapshot,
   query,
   serverTimestamp,
@@ -10,6 +11,7 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "../lib/firebase";
+import { notifyPickupAccepted, notifyPickupStatusChanged } from "./notificationService";
 import type { EcoUserProfile } from "../types/user";
 import type { PickupRequest, PickupStatus, SmartBin } from "../types/firestore";
 
@@ -196,24 +198,49 @@ export async function acceptPickupRequest(
   requestId: string,
   collector: EcoUserProfile
 ) {
-  await updateDoc(doc(db, "pickupRequests", requestId), {
+  const ref = doc(db, "pickupRequests", requestId);
+  const snap = await getDoc(ref);
+  const data = snap.exists() ? snap.data() : null;
+
+  await updateDoc(ref, {
     collectorId: collector.uid,
     collectorName: collector.fullName,
     status: "accepted" satisfies PickupStatus,
     acceptedAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+
+  if (data?.residentId) {
+    try {
+      await notifyPickupAccepted(data.residentId, collector.fullName, requestId);
+    } catch (e) {
+      console.warn("Failed to notify resident of accepted pickup", e);
+    }
+  }
 }
 
 export async function updatePickupStatus(
   requestId: string,
   status: PickupStatus
 ) {
-  await updateDoc(doc(db, "pickupRequests", requestId), {
+  const ref = doc(db, "pickupRequests", requestId);
+  const snap = await getDoc(ref);
+  const data = snap.exists() ? snap.data() : null;
+
+  await updateDoc(ref, {
     status,
     updatedAt: serverTimestamp(),
     ...(status === "completed" ? { completedAt: serverTimestamp() } : {}),
   });
+
+  if (data?.residentId) {
+    try {
+      const catLabel = formatWasteCategory(data.wasteCategory);
+      await notifyPickupStatusChanged(data.residentId, status, catLabel, requestId);
+    } catch (e) {
+      console.warn("Failed to notify resident of status update", e);
+    }
+  }
 }
 
 export function getActiveCollectorJob(jobs: PickupRequest[]) {

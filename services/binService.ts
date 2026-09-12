@@ -2,6 +2,8 @@ import {
   addDoc,
   collection,
   doc,
+  getDoc,
+  getDocs,
   onSnapshot,
   query,
   serverTimestamp,
@@ -10,6 +12,7 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "../lib/firebase";
+import { notifySmartBinOverflow } from "./notificationService";
 import type { EcoUserProfile } from "../types/user";
 import type { SmartBin, WasteCategory } from "../types/firestore";
 
@@ -123,10 +126,32 @@ export async function createSmartBin(admin: EcoUserProfile, input: CreateSmartBi
 }
 
 export async function updateSmartBinFillLevel(binId: string, fillLevel: number) {
-  await updateDoc(doc(db, "smartBins", binId), {
-    fillLevel: clampFillLevel(fillLevel),
+  const clamped = clampFillLevel(fillLevel);
+  const ref = doc(db, "smartBins", binId);
+  const snap = await getDoc(ref);
+  const binData = snap.exists() ? snap.data() : null;
+
+  await updateDoc(ref, {
+    fillLevel: clamped,
     updatedAt: serverTimestamp(),
   });
+
+  if (clamped >= 85 && binData) {
+    try {
+      // Find admins and collectors for this GN division
+      const usersQuery = query(
+        collection(db, "users"),
+        where("role", "in", ["admin", "collector"])
+      );
+      const usersSnap = await getDocs(usersQuery);
+      const targetUserIds = usersSnap.docs.map((d) => d.id);
+      if (targetUserIds.length > 0) {
+        await notifySmartBinOverflow(targetUserIds, binData.name ?? "Smart Bin", clamped, binId);
+      }
+    } catch (err) {
+      console.warn("Failed to send bin overflow notification", err);
+    }
+  }
 }
 
 export async function emptySmartBin(binId: string) {

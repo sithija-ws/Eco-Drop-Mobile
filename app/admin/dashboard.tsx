@@ -12,6 +12,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useAuth } from "../../context/AuthContext";
+import { useNotifications } from "../../context/NotificationContext";
 import {
   listenAdminDashboard,
   type AdminDashboardData,
@@ -38,30 +39,30 @@ const quickActions: QuickAction[] = [
     id: "1",
     title: "User Management",
     icon: "account-group-outline",
-    iconColor: "#355C7D",
-    iconBg: "#EEF3FF",
+    iconColor: colors.primaryDeep,
+    iconBg: colors.surfaceSoft,
     route: "/admin/users",
   },
   {
     id: "2",
-    title: "Reports & Issues",
-    icon: "alert-outline",
-    iconColor: colors.danger,
-    iconBg: "#FFF0F0",
-    route: "/admin/reports",
-  },
-  {
-    id: "3",
     title: "Smart Bins",
     icon: "trash-can-outline",
-    iconColor: "#355C7D",
-    iconBg: "#EEF3FF",
+    iconColor: "#0284C7",
+    iconBg: "#E0F2FE",
     route: "/admin/bins",
   },
   {
+    id: "3",
+    title: "Reports",
+    icon: "alert-octagon-outline",
+    iconColor: "#D97706",
+    iconBg: "#FEF3C7",
+    route: "/admin/reports",
+  },
+  {
     id: "4",
-    title: "Schedule Route",
-    icon: "calendar-month-outline",
+    title: "Schedules",
+    icon: "calendar-clock-outline",
     iconColor: "#FFFFFF",
     iconBg: "rgba(255,255,255,0.22)",
     route: "/admin/schedule",
@@ -71,6 +72,7 @@ const quickActions: QuickAction[] = [
 
 export default function AdminDashboardScreen() {
   const { profile } = useAuth();
+  const { unreadCount } = useNotifications();
   const [data, setData] = useState<AdminDashboardData>({
     totalPickups: 0,
     completedPickups: 0,
@@ -113,8 +115,31 @@ export default function AdminDashboardScreen() {
         contentContainerStyle={styles.scrollContent}
       >
         <View style={styles.headerBlock}>
-          <Text style={styles.eyebrow}>Area Admin Dashboard</Text>
-          <Text style={styles.areaTitle}>{areaTitle}</Text>
+          <View style={styles.headerRow}>
+            <View>
+              <Text style={styles.eyebrow}>Area Admin Dashboard</Text>
+              <Text style={styles.areaTitle}>{areaTitle}</Text>
+            </View>
+
+            <Pressable
+              style={styles.iconButton}
+              hitSlop={10}
+              onPress={() => router.push("/notifications")}
+            >
+              <Ionicons
+                name={unreadCount > 0 ? "notifications" : "notifications-outline"}
+                size={20}
+                color={unreadCount > 0 ? colors.primaryDeep : colors.text}
+              />
+              {unreadCount > 0 && (
+                <View style={styles.badgeContainer}>
+                  <Text style={styles.badgeText}>
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+          </View>
 
           <View style={styles.liveBadge}>
             <View style={styles.liveIconCircle}>
@@ -445,6 +470,40 @@ const styles = StyleSheet.create({
   },
   headerBlock: {
     marginBottom: spacing.xl,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  iconButton: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+    ...softShadow,
+  },
+  badgeContainer: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    backgroundColor: "#EF4444",
+    borderRadius: 9,
+    minWidth: 18,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: colors.surface,
+  },
+  badgeText: {
+    color: "#FFFFFF",
+    fontSize: 9,
+    fontWeight: "900",
   },
   eyebrow: {
     color: "#172B4D",

@@ -1,6 +1,7 @@
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { findBestCollectorForPickup } from "./collectorDispatchService";
+import { notifyPickupCreated } from "./notificationService";
 import type { EcoUserProfile } from "../types/user";
 import type { PickupStatus, WasteCategory } from "../types/firestore";
 
@@ -142,6 +143,13 @@ export async function createPickupRequest(input: CreatePickupRequestInput) {
   };
 
   const docRef = await addDoc(collection(db, "pickupRequests"), pickupData);
+
+  try {
+    const catLabel = wasteCategory.charAt(0).toUpperCase() + wasteCategory.slice(1);
+    await notifyPickupCreated(resident.uid, matchedCollectorId, catLabel, docRef.id);
+  } catch (err) {
+    console.warn("Could not send pickup notification:", err);
+  }
 
   return {
     id: docRef.id,

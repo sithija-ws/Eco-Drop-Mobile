@@ -169,7 +169,7 @@ export default function MapViewComponent({
     <View style={[styles.container, { height: height as any }, style]}>
       <NativeMapView
         ref={mapRef}
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
         initialRegion={initialRegion}
         scrollEnabled={interactive}
         zoomEnabled={interactive}

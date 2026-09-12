@@ -130,4 +130,30 @@ export type RewardItem = {
   status: "active" | "out_of_stock" | "inactive";
   createdAt?: FirestoreDate;
   updatedAt?: FirestoreDate;
-};
+};
+
+export type NotificationType =
+  | "pickup_status"
+  | "collector_dispatch"
+  | "smart_bin_overflow"
+  | "schedule_alert"
+  | "reward_earned"
+  | "system";
+
+export type EcoNotification = {
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  type: NotificationType;
+  read: boolean;
+  createdAt?: FirestoreDate;
+  data?: {
+    requestId?: string;
+    binId?: string;
+    scheduleId?: string;
+    rewardId?: string;
+    screen?: string;
+  };
+};
+

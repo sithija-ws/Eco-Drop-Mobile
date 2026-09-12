@@ -144,7 +144,7 @@ export default function AnimatedSplashScreen({
     <View style={styles.container}>
       <LinearGradient
         colors={gradients.splash as [string, string, string]}
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
         start={{ x: 0.1, y: 0.1 }}
         end={{ x: 0.9, y: 0.9 }}
       />
