@@ -77,6 +77,27 @@ export default function CollectorJobsScreen() {
     heading: 0,
   });
 
+  // Auto-fetch initial device location on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === "granted") {
+          const loc = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          setCollectorCoords({
+            latitude: loc.coords.latitude,
+            longitude: loc.coords.longitude,
+            heading: loc.coords.heading ?? 0,
+          });
+        }
+      } catch (e) {
+        console.warn("Initial location fetch failed", e);
+      }
+    })();
+  }, []);
+
   // Toggle GPS broadcasting for Live Location tracking
   const toggleGpsBroadcasting = async () => {
     if (!isGpsBroadcasting) {
@@ -86,6 +107,27 @@ export default function CollectorJobsScreen() {
         return;
       }
       setIsGpsBroadcasting(true);
+
+      // Immediately fetch & broadcast real GPS location
+      try {
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        setCollectorCoords({
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+          heading: loc.coords.heading ?? 0,
+        });
+        if (profile?.uid) {
+          await updateCollectorGpsLocation(
+            profile.uid,
+            loc.coords.latitude,
+            loc.coords.longitude,
+            loc.coords.heading ?? 0
+          );
+        }
+      } catch (err) {
+        console.warn("Initial GPS update error", err);
+      }
+
       Alert.alert("GPS Live Tracking Active", "Residents can now track your vehicle en route.");
     } else {
       setIsGpsBroadcasting(false);
@@ -114,7 +156,7 @@ export default function CollectorJobsScreen() {
       } catch (e) {
         console.warn("GPS broadcast failed", e);
       }
-    }, 10000);
+    }, 5000);
 
     return () => clearInterval(interval);
   }, [isGpsBroadcasting, profile?.uid, isSimulatingDrive]);

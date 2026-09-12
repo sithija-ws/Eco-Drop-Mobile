@@ -13,12 +13,14 @@ import { colors, radius, softShadow, spacing } from "../../constants/theme";
 let NativeMapView: any = null;
 let NativeMarker: any = null;
 let NativePolyline: any = null;
+let NativeUrlTile: any = null;
 
 try {
   const Maps = require("react-native-maps");
   NativeMapView = Maps.default || Maps;
   NativeMarker = Maps.Marker;
   NativePolyline = Maps.Polyline;
+  NativeUrlTile = Maps.UrlTile;
 } catch (e) {
   // react-native-maps not loaded or on unsupported web environment
 }
@@ -155,9 +157,10 @@ export default function MapViewComponent({
   <div id="map"></div>
   <script>
     var map = L.map('map', { zoomControl: true }).setView([${mapCenterLat}, ${mapCenterLng}], 14);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      attribution: '© OpenStreetMap'
+      subdomains: 'abcd',
+      attribution: '© CARTO, © OpenStreetMap'
     }).addTo(map);
     ${markersJs}
     ${polylineJs}
@@ -254,6 +257,15 @@ export default function MapViewComponent({
         onPress={handleMapPress}
         onRegionChangeComplete={(r: any) => setCurrentRegion(r)}
       >
+        {/* CARTO Voyager Tile Layer - 100% open, fast, zero HTTP 403 access blocks */}
+        {NativeUrlTile && (
+          <NativeUrlTile
+            urlTemplate="https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"
+            maximumZ={19}
+            tileSize={256}
+          />
+        )}
+
         {markers.map((m) => (
           <NativeMarker
             key={m.id}

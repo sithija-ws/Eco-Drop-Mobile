@@ -47,11 +47,7 @@ export default function TrackPickupScreen() {
     longitude: number;
     heading?: number;
     updatedAt?: any;
-  }>({
-    latitude: 6.9200,
-    longitude: 79.8550,
-    heading: 0,
-  });
+  } | null>(null);
 
   // Listen to Pickup Request updates in Firestore
   useEffect(() => {
@@ -81,14 +77,16 @@ export default function TrackPickupScreen() {
     const unsubGps = subscribeCollectorLocation(
       pickup.collectorId,
       (location) => {
-        if (location) {
+        if (location && location.latitude && location.longitude) {
           setDriverCoords((prev) => {
-            const calculatedHeading = calculateBearing(
-              prev.latitude,
-              prev.longitude,
-              location.latitude,
-              location.longitude
-            );
+            const calculatedHeading = prev
+              ? calculateBearing(
+                  prev.latitude,
+                  prev.longitude,
+                  location.latitude,
+                  location.longitude
+                )
+              : 0;
             return {
               latitude: location.latitude,
               longitude: location.longitude,
@@ -129,21 +127,28 @@ export default function TrackPickupScreen() {
   const pickupLat = pickup.location?.latitude || 6.9271;
   const pickupLng = pickup.location?.longitude || 79.8612;
 
-  const distanceKm = calculateDistanceKm(
-    driverCoords.latitude,
-    driverCoords.longitude,
-    pickupLat,
-    pickupLng
-  );
+  const hasLiveDriverLocation = !!driverCoords;
 
-  const etaMinutes = estimateArrivalMinutes(
-    driverCoords.latitude,
-    driverCoords.longitude,
-    pickupLat,
-    pickupLng
-  );
+  const distanceKm = hasLiveDriverLocation
+    ? calculateDistanceKm(
+        driverCoords.latitude,
+        driverCoords.longitude,
+        pickupLat,
+        pickupLng
+      )
+    : 0;
+
+  const etaMinutes = hasLiveDriverLocation
+    ? estimateArrivalMinutes(
+        driverCoords.latitude,
+        driverCoords.longitude,
+        pickupLat,
+        pickupLng
+      )
+    : 0;
 
   const isArrivingSoon =
+    hasLiveDriverLocation &&
     pickup.status === "collector_on_the_way" &&
     isCollectorNearDestination(
       driverCoords.latitude,
@@ -153,10 +158,12 @@ export default function TrackPickupScreen() {
       300
     );
 
-  const polylinePoints = generateInterpolatedPolyline(
-    driverCoords,
-    { latitude: pickupLat, longitude: pickupLng }
-  );
+  const polylinePoints = hasLiveDriverLocation
+    ? generateInterpolatedPolyline(driverCoords, {
+        latitude: pickupLat,
+        longitude: pickupLng,
+      })
+    : [];
 
   const getStatusStep = (status: string) => {
     switch (status) {
@@ -234,8 +241,12 @@ export default function TrackPickupScreen() {
           <MapViewComponent
             height={280}
             initialRegion={{
-              latitude: (driverCoords.latitude + pickupLat) / 2,
-              longitude: (driverCoords.longitude + pickupLng) / 2,
+              latitude: driverCoords
+                ? (driverCoords.latitude + pickupLat) / 2
+                : pickupLat,
+              longitude: driverCoords
+                ? (driverCoords.longitude + pickupLng) / 2
+                : pickupLng,
               latitudeDelta: 0.04,
               longitudeDelta: 0.04,
             }}
@@ -248,15 +259,19 @@ export default function TrackPickupScreen() {
                 description: pickup.location?.address,
                 pinColor: colors.primary,
               },
-              {
-                id: "driver-loc",
-                latitude: driverCoords.latitude,
-                longitude: driverCoords.longitude,
-                title: pickup.collectorName || "Eco-Collector",
-                description: `Distance: ${formatDistanceDisplay(distanceKm)}`,
-                pinColor: colors.primaryDark,
-                heading: driverCoords.heading,
-              },
+              ...(driverCoords
+                ? [
+                    {
+                      id: "driver-loc",
+                      latitude: driverCoords.latitude,
+                      longitude: driverCoords.longitude,
+                      title: pickup.collectorName || "Eco-Collector",
+                      description: `Distance: ${formatDistanceDisplay(distanceKm)}`,
+                      pinColor: colors.primaryDark,
+                      heading: driverCoords.heading,
+                    },
+                  ]
+                : []),
             ]}
             polyline={polylinePoints}
           />
@@ -268,19 +283,24 @@ export default function TrackPickupScreen() {
             <View style={{ flex: 1, marginRight: spacing.xs }}>
               <View style={styles.etaTitleRow}>
                 <Text style={styles.etaTitle}>Estimated Arrival</Text>
-                {isLocationBroadcastingFresh(driverCoords.updatedAt) && (
-                  <View style={styles.liveBroadcastPill}>
-                    <View style={styles.liveBroadcastDot} />
-                    <Text style={styles.liveBroadcastText}>Broadcasting Live</Text>
-                  </View>
-                )}
+                {driverCoords &&
+                  isLocationBroadcastingFresh(driverCoords.updatedAt) && (
+                    <View style={styles.liveBroadcastPill}>
+                      <View style={styles.liveBroadcastDot} />
+                      <Text style={styles.liveBroadcastText}>
+                        Broadcasting Live
+                      </Text>
+                    </View>
+                  )}
               </View>
               <Text style={styles.etaValue}>
                 {pickup.status === "completed"
                   ? "Completed"
-                  : formatEtaDisplay(etaMinutes).etaText}
+                  : hasLiveDriverLocation
+                  ? formatEtaDisplay(etaMinutes).etaText
+                  : "Waiting for collector live location..."}
               </Text>
-              {pickup.status !== "completed" && (
+              {pickup.status !== "completed" && hasLiveDriverLocation && (
                 <Text style={styles.etaSubDetail}>
                   Distance away: {formatDistanceDisplay(distanceKm)}
                 </Text>
