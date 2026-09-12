@@ -85,7 +85,7 @@ export default function MapViewComponent({
   const isNativeMapSupported =
     Platform.OS !== "web" && NativeMapView !== null;
 
-  // Auto-fit bounds when markers or polyline change
+  // Auto-fit bounds when markers or polyline change (Native)
   useEffect(() => {
     if (!isNativeMapSupported || !autoFit || !mapRef.current) return;
 
@@ -109,7 +109,81 @@ export default function MapViewComponent({
   };
 
   if (!isNativeMapSupported) {
-    // Elegant fallback view for Web / Fallback environments
+    const mapCenterLat =
+      markers.length > 0 ? markers[0].latitude : currentRegion.latitude;
+    const mapCenterLng =
+      markers.length > 0 ? markers[0].longitude : currentRegion.longitude;
+
+    const markersJs = markers
+      .map(
+        (m) =>
+          `L.marker([${m.latitude}, ${m.longitude}]).addTo(map).bindPopup("<b>${
+            m.title || "Location"
+          }</b><br>${m.description || ""}");`
+      )
+      .join("\n");
+
+    const polylineJs =
+      polyline && polyline.length > 1
+        ? `L.polyline(${JSON.stringify(
+            polyline.map((p) => [p.latitude, p.longitude])
+          )}, { color: '${polylineColor}', weight: 5 }).addTo(map);`
+        : "";
+
+    const allCoords = [
+      ...markers.map((m) => [m.latitude, m.longitude]),
+      ...(polyline || []).map((p) => [p.latitude, p.longitude]),
+    ];
+
+    const fitBoundsJs =
+      allCoords.length >= 2
+        ? `map.fitBounds(${JSON.stringify(allCoords)}, { padding: [30, 30] });`
+        : "";
+
+    const leafletHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    html, body { margin:0; padding:0; height:100%; width:100%; overflow:hidden; background:#F6FFF8; }
+    #map { width:100%; height:100%; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    var map = L.map('map', { zoomControl: true }).setView([${mapCenterLat}, ${mapCenterLng}], 14);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
+    ${markersJs}
+    ${polylineJs}
+    ${fitBoundsJs}
+  </script>
+</body>
+</html>`;
+
+    if (Platform.OS === "web") {
+      return (
+        <View style={[styles.container, { height: height as any }, style]}>
+          <iframe
+            srcDoc={leafletHtml}
+            style={{
+              width: "100%",
+              height: "100%",
+              border: "none",
+              borderRadius: radius.lg,
+            }}
+            title="Eco-Drop Live Map"
+          />
+        </View>
+      );
+    }
+
+    // Mobile fallback if react-native-maps is disabled
     return (
       <View
         style={[
@@ -129,7 +203,7 @@ export default function MapViewComponent({
             Lat: {currentRegion.latitude.toFixed(4)}, Lng:{" "}
             {currentRegion.longitude.toFixed(4)}
           </Text>
-          
+
           {markers.length > 0 && (
             <View style={styles.markerBadgeContainer}>
               <Ionicons name="location" size={14} color={colors.primaryDark} />
@@ -142,7 +216,7 @@ export default function MapViewComponent({
           {polyline && polyline.length > 1 && (
             <View style={styles.routeBadgeContainer}>
               <MaterialCommunityIcons name="routes" size={14} color={colors.primary} />
-              <Text style={styles.routeBadgeText}>Live Navigation Route Active</Text>
+              <Text style={styles.routeBadgeText}>Live Route Navigation Active</Text>
             </View>
           )}
         </View>
@@ -282,4 +356,3 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 });
-
